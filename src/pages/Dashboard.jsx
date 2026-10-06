@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api.js'
-import ServiceTypeSelector from '../components/ServiceTypeSelector.jsx'
 
 function Dashboard() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -10,7 +9,13 @@ function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [activeSection, setActiveSection] = useState('usuarios')
   const [configurationOpen, setConfigurationOpen] = useState(true)
-  const [serviceType, setServiceType] = useState(() => localStorage.getItem('tipo_servicio') || '')
+  const [orderForm, setOrderForm] = useState({
+    nombre: '',
+    informacion: '',
+    detalles: '',
+    tipoServicio: ''
+  })
+  const [orders, setOrders] = useState([])
   const navigate = useNavigate()
 
   // Formulario de creación
@@ -70,9 +75,10 @@ function Dashboard() {
     navigate('/login')
   }
 
-  const handleServiceTypeChange = (value) => {
-    setServiceType(value)
-    localStorage.setItem('tipo_servicio', value)
+  const handleCreateOrder = (e) => {
+    e.preventDefault()
+    setOrders((currentOrders) => [...currentOrders, { ...orderForm, id: Date.now() }])
+    setOrderForm({ nombre: '', informacion: '', detalles: '', tipoServicio: '' })
   }
 
   const handleCreateUser = async (e) => {
@@ -338,20 +344,84 @@ function Dashboard() {
           activeSection === 'pedidos' && (
             <div>
               <div className="card p-4 mb-4" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-                <ServiceTypeSelector value={serviceType} onChange={handleServiceTypeChange} />
-              </div>
-              <h4 className="mb-3">Menú del Restaurante</h4>
-              <div className="row">
-                {[1, 2, 3, 4, 5, 6].map(i => (
-                  <div key={i} className="col-md-3 mb-3">
-                    <div className="card p-3 text-center" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-                      <img src="https://via.placeholder.com/150" className="mb-2 rounded" alt="Producto" />
-                      <h5>Hamburguesa</h5>
-                      <p className="text-muted">$28.900</p>
-                    </div>
+                <h4 className="mb-4">Crear un pedido</h4>
+                <form onSubmit={handleCreateOrder}>
+                  <div className="mb-3">
+                    <label htmlFor="order-name" className="form-label">Nombre del pedido</label>
+                    <input
+                      id="order-name"
+                      type="text"
+                      className="form-control"
+                      placeholder="Ej. Pedido de Juan"
+                      value={orderForm.nombre}
+                      onChange={(e) => setOrderForm({ ...orderForm, nombre: e.target.value })}
+                      required
+                    />
                   </div>
-                ))}
+                  <div className="mb-3">
+                    <label htmlFor="order-information" className="form-label">Información del pedido</label>
+                    <textarea
+                      id="order-information"
+                      className="form-control"
+                      rows="3"
+                      placeholder="Cuéntanos qué deseas pedir"
+                      value={orderForm.informacion}
+                      onChange={(e) => setOrderForm({ ...orderForm, informacion: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="order-details" className="form-label">Detalles del pedido</label>
+                    <textarea
+                      id="order-details"
+                      className="form-control"
+                      rows="3"
+                      placeholder="Agrega cantidades, preferencias o indicaciones especiales"
+                      value={orderForm.detalles}
+                      onChange={(e) => setOrderForm({ ...orderForm, detalles: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label htmlFor="order-service-type" className="form-label">¿Cómo deseas recibir tu pedido?</label>
+                    <select
+                      id="order-service-type"
+                      className="form-select"
+                      value={orderForm.tipoServicio}
+                      onChange={(e) => setOrderForm({ ...orderForm, tipoServicio: e.target.value })}
+                      required
+                    >
+                      <option value="" disabled>Selecciona una opción</option>
+                      <option value="domicilio">A domicilio</option>
+                      <option value="para_llevar">Para llevar</option>
+                      <option value="comer_aqui">Para comer aquí</option>
+                    </select>
+                  </div>
+                  <button type="submit" className="btn text-white" style={{ backgroundColor: '#1a3c34' }}>
+                    <i className="fa-solid fa-plus me-2"></i>Registrar pedido
+                  </button>
+                  <p className="form-text mt-2 mb-0">Los pedidos registrados aquí se mantienen solo durante esta sesión.</p>
+                </form>
               </div>
+              {orders.length > 0 && (
+                <section aria-labelledby="registered-orders-heading">
+                  <h4 id="registered-orders-heading" className="mb-3">Pedidos de esta sesión</h4>
+                  <div className="row">
+                    {orders.map((order) => (
+                      <div key={order.id} className="col-md-6 mb-3">
+                        <article className="card p-3 h-100" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+                          <h5>{order.nombre}</h5>
+                          <p className="mb-2">{order.informacion}</p>
+                          {order.detalles && <p className="text-muted mb-2">{order.detalles}</p>}
+                          <span className="badge align-self-start" style={{ backgroundColor: '#e6f9f0', color: '#1a7a4a' }}>
+                            {order.tipoServicio === 'domicilio' ? 'A domicilio' : order.tipoServicio === 'para_llevar' ? 'Para llevar' : 'Para comer aquí'}
+                          </span>
+                        </article>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           )
         )}
