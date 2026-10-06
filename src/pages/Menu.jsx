@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../services/api.js'
+import ServiceTypeSelector from '../components/ServiceTypeSelector.jsx'
 
 function Menu() {
   const [searchParams] = useSearchParams()
@@ -9,6 +10,12 @@ function Menu() {
   const [token, setToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [serviceType, setServiceType] = useState(() => localStorage.getItem('tipo_servicio') || '')
+
+  const handleServiceTypeChange = (value) => {
+    setServiceType(value)
+    localStorage.setItem('tipo_servicio', value)
+  }
 
   useEffect(() => {
     if (!mesa) {
@@ -50,6 +57,10 @@ function Menu() {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Menú - Mesa {mesa}</h2>
         <span className="badge bg-success">Sesión activa</span>
+      </div>
+
+      <div className="card p-4 mb-4">
+        <ServiceTypeSelector value={serviceType} onChange={handleServiceTypeChange} />
       </div>
 
       <div className="row">

@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api.js'
+import ServiceTypeSelector from '../components/ServiceTypeSelector.jsx'
 
 function Dashboard() {
   const [currentUser, setCurrentUser] = useState(null)
   const [users, setUsers] = useState([])
   const [searchedUser, setSearchedUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [activeSection, setActiveSection] = useState('usuarios')
+  const [configurationOpen, setConfigurationOpen] = useState(true)
+  const [serviceType, setServiceType] = useState(() => localStorage.getItem('tipo_servicio') || '')
   const navigate = useNavigate()
 
   // Formulario de creación
@@ -39,6 +43,7 @@ function Dashboard() {
     try {
       const response = await api.get('/api/auth/me')
       setCurrentUser(response.data)
+      if (response.data.rol === 'CLIENTE') setActiveSection('pedidos')
       await loadUsers()
     } catch (err) {
       navigate('/login')
@@ -63,6 +68,11 @@ function Dashboard() {
       console.error('Error en logout:', err)
     }
     navigate('/login')
+  }
+
+  const handleServiceTypeChange = (value) => {
+    setServiceType(value)
+    localStorage.setItem('tipo_servicio', value)
   }
 
   const handleCreateUser = async (e) => {
@@ -202,8 +212,49 @@ function Dashboard() {
         <ul className="nav flex-column mt-3">
           {currentUser.rol !== 'CLIENTE' && (
             <li className="nav-item">
-              <a href="#" className="nav-link" style={{
+              <button type="button" className="nav-link w-100 text-start"
+                aria-expanded={configurationOpen}
+                onClick={() => setConfigurationOpen(!configurationOpen)}
+                style={{
+                color: 'rgba(255,255,255,0.8)',
+                padding: '12px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                background: 'none',
+                border: 'none'
+              }}>
+                <i className="fa-solid fa-gear"></i> Configuración
+                <i className={`fa-solid fa-chevron-${configurationOpen ? 'up' : 'down'} ms-auto`}></i>
+              </button>
+              {configurationOpen && (
+                <button type="button" className="nav-link w-100 text-start"
+                  aria-current={activeSection === 'usuarios' ? 'page' : undefined}
+                  onClick={() => setActiveSection('usuarios')}
+                  style={{
+                  backgroundColor: activeSection === 'usuarios' ? '#2c5a4d' : 'transparent',
+                  border: 'none',
+                  borderLeft: activeSection === 'usuarios' ? '4px solid #fff' : '4px solid transparent',
+                  color: 'white',
+                  fontWeight: activeSection === 'usuarios' ? 600 : 400,
+                  padding: '12px 20px 12px 48px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <i className="fa-solid fa-users"></i> Usuarios
+                </button>
+              )}
+            </li>
+          )}
+          {currentUser.rol === 'CLIENTE' && (
+            <li className="nav-item">
+              <button type="button" className="nav-link w-100 text-start"
+                aria-current={activeSection === 'pedidos' ? 'page' : undefined}
+                onClick={() => setActiveSection('pedidos')}
+                style={{
                 backgroundColor: '#2c5a4d',
+                border: 'none',
                 borderLeft: '4px solid #fff',
                 color: 'white',
                 fontWeight: 600,
@@ -212,17 +263,14 @@ function Dashboard() {
                 alignItems: 'center',
                 gap: '12px'
               }}>
-                <i className="fa-solid fa-users"></i> Usuarios
-              </a>
+                <i className="fa-solid fa-receipt"></i> Pedidos
+              </button>
             </li>
           )}
           {currentUser.rol === 'CLIENTE' && (
             <li className="nav-item">
               <a href="/menu" className="nav-link" style={{
-                backgroundColor: '#2c5a4d',
-                borderLeft: '4px solid #fff',
-                color: 'white',
-                fontWeight: 600,
+                color: 'rgba(255,255,255,0.8)',
                 padding: '12px 20px',
                 display: 'flex',
                 alignItems: 'center',
@@ -271,7 +319,7 @@ function Dashboard() {
       <div style={{ marginLeft: '260px', flex: 1, padding: '30px' }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-          <h2>{currentUser.rol === 'CLIENTE' ? 'Menú del Restaurante' : 'Gestión de Usuarios'}</h2>
+          <h2>{currentUser.rol === 'CLIENTE' ? 'Pedidos' : 'Gestión de Usuarios'}</h2>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <span className="text-muted">Hola, <strong>{currentUser.nombre}</strong></span>
@@ -287,17 +335,25 @@ function Dashboard() {
 
         {/* VISTA CLIENTE */}
         {currentUser.rol === 'CLIENTE' && (
-          <div className="row">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="col-md-3 mb-3">
-                <div className="card p-3 text-center" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-                  <img src="https://via.placeholder.com/150" className="mb-2 rounded" alt="Producto" />
-                  <h5>Hamburguesa</h5>
-                  <p className="text-muted">$28.900</p>
-                </div>
+          activeSection === 'pedidos' && (
+            <div>
+              <div className="card p-4 mb-4" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+                <ServiceTypeSelector value={serviceType} onChange={handleServiceTypeChange} />
               </div>
-            ))}
-          </div>
+              <h4 className="mb-3">Menú del Restaurante</h4>
+              <div className="row">
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                  <div key={i} className="col-md-3 mb-3">
+                    <div className="card p-3 text-center" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+                      <img src="https://via.placeholder.com/150" className="mb-2 rounded" alt="Producto" />
+                      <h5>Hamburguesa</h5>
+                      <p className="text-muted">$28.900</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
         )}
 
         {/* VISTA ADMIN/EMPLEADO */}
