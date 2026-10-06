@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiPlus, FiEdit2, FiX } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiX, FiTrash2 } from 'react-icons/fi'
 import api from '../services/api.js'
 
 function Productos() {
@@ -310,22 +310,26 @@ function Productos() {
                     </td>
                     <td>${parseFloat(producto.precio).toLocaleString('es-CO')}</td>
                     <td>
-                      {producto.disponible ? (
-                        <span className="badge bg-success-subtle text-success border border-success-subtle">
-                          <i className="fa-solid fa-circle-check me-1"></i>
-                          Disponible
-                        </span>
-                      ) : (
-                        <span className="badge bg-danger-subtle text-danger border border-danger-subtle">
-                          <i className="fa-solid fa-ban me-1"></i>
-                          No disponible
-                        </span>
-                      )}
+                      <select 
+                        className="form-select form-select-sm" 
+                        style={{ width: 'auto' }}
+                        value={producto.disponible ? 'disponible' : 'no-disponible'}
+                        onChange={() => {}}
+                        disabled
+                      >
+                        <option value="disponible">Disponible</option>
+                        <option value="no-disponible">No disponible</option>
+                      </select>
                     </td>
                     <td>
-                      <button className="btn btn-sm btn-outline-primary" title="Editar producto" onClick={() => openEditModal(producto)}>
-                        <FiEdit2 />
-                      </button>
+                      <div className="d-flex gap-1 flex-wrap">
+                        <button className="btn btn-sm btn-outline-primary" title="Editar producto" onClick={() => openEditModal(producto)}>
+                          <FiEdit2 />
+                        </button>
+                        <button className="btn btn-sm btn-outline-danger" title="Eliminar producto" disabled>
+                          <FiTrash2 />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -335,90 +339,106 @@ function Productos() {
         </div>
       </div>
 
-      {/* Modal Reutilizable */}
+      {/* Modal Reutilizable con Backdrop */}
       {showModal && (
-        <div className="modal show" style={{ display: 'block' }} tabIndex="-1">
-          <div className="modal-dialog modal-md">
-            <div className="modal-content">
-              <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
-                <h5 className="modal-title">
-                  {modalMode === 'crear' ? (
-                    <><FiPlus style={{ marginRight: '8px' }} /> Agregar Producto</>
-                  ) : (
-                    <><FiEdit2 style={{ marginRight: '8px' }} /> Modificar Producto</>
-                  )}
-                </h5>
-                <button type="button" className="btn-close btn-close-white" onClick={closeModal}></button>
-              </div>
-              <form onSubmit={handleSubmit}>
-                <div className="modal-body">
-                  {errorMessage && (
-                    <div className="alert alert-danger d-flex align-items-center" role="alert">
-                      <i className="fa-solid fa-circle-exclamation me-2"></i>
-                      <div>{errorMessage}</div>
-                    </div>
-                  )}
-                  <div className="mb-3">
-                    <label className="form-label small fw-semibold">Nombre del producto</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Ej: Hamburguesa Clásica"
-                      required
-                      value={formData.nombre}
-                      onChange={(e) => setFormData({...formData, nombre: e.target.value})}
-                    />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label small fw-semibold">Descripción</label>
-                    <textarea
-                      className="form-control"
-                      rows="3"
-                      placeholder="Descripción del producto"
-                      value={formData.descripcion}
-                      onChange={(e) => setFormData({...formData, descripcion: e.target.value})}
-                    />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label small fw-semibold">Precio</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="form-control"
-                      placeholder="Ej: 28900"
-                      required
-                      value={formData.precio}
-                      onChange={(e) => setFormData({...formData, precio: e.target.value})}
-                    />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label small fw-semibold">URL de la imagen</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="https://ejemplo.com/imagen.jpg"
-                      value={formData.imagen}
-                      onChange={(e) => setFormData({...formData, imagen: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={closeModal}>
-                    <FiX style={{ marginRight: '5px' }} /> Cancelar
-                  </button>
-                  <button type="submit" className="btn btn-sm" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+        <>
+          {/* Backdrop / Overlay */}
+          <div 
+            onClick={closeModal}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 1040
+            }}
+          />
+          {/* Modal */}
+          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
+            <div className="modal-dialog modal-md">
+              <div className="modal-content">
+                <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+                  <h5 className="modal-title">
                     {modalMode === 'crear' ? (
-                      <><FiPlus style={{ marginRight: '5px' }} /> Crear</>
+                      <><FiPlus style={{ marginRight: '8px' }} /> Agregar Producto</>
                     ) : (
-                      <><FiEdit2 style={{ marginRight: '5px' }} /> Guardar cambios</>
+                      <><FiEdit2 style={{ marginRight: '8px' }} /> Modificar Producto</>
                     )}
-                  </button>
+                  </h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={closeModal}></button>
                 </div>
-              </form>
+                <form onSubmit={handleSubmit}>
+                  <div className="modal-body">
+                    {errorMessage && (
+                      <div className="alert alert-danger d-flex align-items-center" role="alert">
+                        <i className="fa-solid fa-circle-exclamation me-2"></i>
+                        <div>{errorMessage}</div>
+                      </div>
+                    )}
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Nombre del producto</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Ej: Hamburguesa Clásica"
+                        required
+                        value={formData.nombre}
+                        onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Descripción</label>
+                      <textarea
+                        className="form-control"
+                        rows="3"
+                        placeholder="Descripción del producto"
+                        value={formData.descripcion}
+                        onChange={(e) => setFormData({...formData, descripcion: e.target.value})}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Precio</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="form-control"
+                        placeholder="Ej: 28900"
+                        required
+                        value={formData.precio}
+                        onChange={(e) => setFormData({...formData, precio: e.target.value})}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">URL de la imagen</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="https://ejemplo.com/imagen.jpg"
+                        value={formData.imagen}
+                        onChange={(e) => setFormData({...formData, imagen: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="modal-footer">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeModal}>
+                      <FiX style={{ marginRight: '5px' }} /> Cancelar
+                    </button>
+                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+                      {modalMode === 'crear' ? (
+                        <><FiPlus style={{ marginRight: '5px' }} /> Crear</>
+                      ) : (
+                        <><FiEdit2 style={{ marginRight: '5px' }} /> Guardar cambios</>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
