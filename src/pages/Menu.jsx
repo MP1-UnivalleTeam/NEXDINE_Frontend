@@ -1,10 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, useParams } from 'react-router-dom'
 import api from '../services/api.js'
+import BuscadorProductos from '../components/BuscadorProductos.jsx'
+import SelectorTipoServicio, { TIPOS_SERVICIO } from '../components/SelectorTipoServicio.jsx'
+import { filtrarMenu, contarProductos } from '../utils/buscadorProductos.js'
 
 const CLAVE_TOKEN = 'sessionToken'
 const CLAVE_MESA = 'mesaCodigo'
 const INTERVALO_VALIDACION_MS = 60000
+
+// RF003 — Estado de interfaz para el menú público (sin sesión de mesa).
+// Solo es UI: el valor real vive en la sesión del backend.
+const CLAVE_TIPO_UI = 'tipoServicioUI'
 
 // FASE 11 — Actualización automática del menú.
 // Un único intervalo para toda la vista (nunca uno por producto).
@@ -35,9 +42,18 @@ function Menu() {
   const [error, setError] = useState('')
   const [sesionExpirada, setSesionExpirada] = useState(false)
 
+  // RF019 — Criterios de búsqueda
+  const [textoBusqueda, setTextoBusqueda] = useState('')
+  const [categoriaFiltro, setCategoriaFiltro] = useState(null)
+
+  // RF003 — Tipo de servicio
+  const [tipoServicio, setTipoServicio] = useState(null)
+  const [errorTipoServicio, setErrorTipoServicio] = useState('')
+
   useEffect(() => {
     if (esMenuPublico) {
       cargarMenuPublico()
+      cargarTipoServicio()
       return
     }
 
@@ -67,6 +83,58 @@ function Menu() {
     } finally {
       setLoading(false)
     }
+  }
+
+  /**
+   * RF019 — Categorías filtradas por el criterio actual.
+   * Se deriva de `categorias`, por lo que el polling de Fase 11
+   * (productos nuevos, cambios de disponibilidad, nombre o categoría)
+   * se refleja automáticamente sin una segunda fuente de datos.
+   */
+  const menuFiltrado = useMemo(
+    () => filtrarMenu(categorias, textoBusqueda, categoriaFiltro),
+    [categorias, textoBusqueda, categoriaFiltro]
+  )
+
+  const hayFiltroActivo = Boolean(textoBusqueda.trim() || categoriaFiltro)
+  const totalVisibles = contarProductos(menuFiltrado)
+
+  const aplicarBusqueda = ({ texto, categoriaId }) => {
+    setTextoBusqueda(texto ?? '')
+    setCategoriaFiltro(categoriaId ?? null)
+  }
+
+  /**
+   * RF003 — Confirma el tipo de servicio (solo enlace público).
+   *
+   * No crea sesión de mesa, no inventa mesa y no toca sessionToken
+   * ni mesaCodigo. La selección queda como estado del cliente.
+   *
+   * Los valores válidos (DOMICILIO / PARA_LLEVAR) se validan en el backend;
+   * aquí se comprueba la lista para dar feedback inmediato.
+   */
+  const confirmarTipoServicio = async (tipo) => {
+    setErrorTipoServicio('')
+
+    const permitidos = Object.values(TIPOS_SERVICIO)
+    if (!permitidos.includes(tipo)) {
+      setErrorTipoServicio('Tipo de servicio inválido.')
+      return
+    }
+
+    setTipoServicio(tipo)
+    sessionStorage.setItem(CLAVE_TIPO_UI, tipo)
+  }
+
+  /**
+   * Recupera el tipo de servicio seleccionado.
+   *
+   * Solo aplica al enlace público. En el flujo QR no se invoca ningún
+   * endpoint de tipo de servicio: la mesa ya define el contexto.
+   */
+  const cargarTipoServicio = () => {
+    if (!esMenuPublico) return
+    setTipoServicio(sessionStorage.getItem(CLAVE_TIPO_UI) || null)
   }
 
   /**
@@ -259,12 +327,43 @@ function Menu() {
         {!esMenuPublico && <span className="badge bg-success">Sesión activa</span>}
       </div>
 
-      {categorias.length === 0 ? (
+      {/* RF003 — Tipo de servicio.
+          Solo tiene sentido en el enlace público: el QR ya representa una
+          mesa física con su contexto asociado (RF001/RF004/RF022).
+          En QR no se muestra, no se llama al backend y no se toca la sesión. */}
+      {esMenuPublico && (
+        <SelectorTipoServicio
+          seleccionado={tipoServicio}
+          onConfirmar={confirmarTipoServicio}
+          error={errorTipoServicio}
+        />
+      )}
+
+      {/* RF019 — Búsqueda de productos */}
+      {categorias.length > 0 && (
+        <BuscadorProductos
+          categoriasDisponibles={categorias}
+          texto={textoBusqueda}
+          categoriaId={categoriaFiltro}
+          onChange={aplicarBusqueda}
+        />
+      )}
+
+      {hayFiltroActivo && totalVisibles === 0 ? (
+        /* RF019 — Sin coincidencias */
+        <div className="text-center py-5">
+          <i className="fa-solid fa-magnifying-glass fa-2x text-muted mb-3 d-block"></i>
+          <p className="mb-1">No se encontraron productos</p>
+          <small className="text-muted">
+            Pruebe con otro texto o cambie el filtro de categoría.
+          </small>
+        </div>
+      ) : categorias.length === 0 ? (
         <div className="text-center text-muted mt-5">
           <p>No hay productos disponibles en este momento.</p>
         </div>
       ) : (
-        categorias.map(categoria => (
+        menuFiltrado.map(categoria => (
           <div key={categoria.nombre} className="mb-4">
             <h4 className="border-bottom pb-2" style={{ color: '#1a3c34' }}>
               {categoria.nombre}

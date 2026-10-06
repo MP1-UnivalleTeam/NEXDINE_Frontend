@@ -16,6 +16,9 @@ function Productos() {
 
   const esSuperadmin = () => currentUser?.rol === 'SUPERADMIN'
 
+// Valor centinela del selector para abrir el modal de nueva categoría
+const CREAR_CATEGORIA = '__nueva_categoria__'
+
   // Modal states
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('crear') // 'crear' o 'editar'
@@ -41,6 +44,12 @@ function Productos() {
   // Eliminación en curso (evita clics duplicados)
   const [deleting, setDeleting] = useState(false)
 
+  // Crear categoría desde el formulario de producto
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [categoryError, setCategoryError] = useState('')
+  const [creatingCategory, setCreatingCategory] = useState(false)
+
   // RF007: sucursal del ADMINISTRADOR (informativa, no se envía)
   const [miSucursal, setMiSucursal] = useState(null)
 
@@ -63,7 +72,11 @@ function Productos() {
       if (response.data.rol !== 'ADMINISTRADOR' && response.data.rol !== 'SUPERADMIN') {
         navigate('/dashboard')
       } else {
-        await Promise.all([loadProductos(), loadSucursales(), loadCategorias()])
+        await Promise.all([
+        loadProductos(),
+        loadSucursales(response.data),
+        loadCategorias()
+      ])
       }
     } catch (err) {
       navigate('/login')
@@ -81,13 +94,22 @@ function Productos() {
     }
   }
 
-  const loadSucursales = async () => {
+  /**
+   * Carga las sucursales del restaurante.
+   *
+   * El usuario se recibe como parámetro (no desde el state) porque al
+   * ejecutarse junto a setCurrentUser(), React todavía no ha aplicado
+   * el valor: leer `currentUser` aquí devolvería null.
+   *
+   * Para ADMINISTRADOR el backend devuelve únicamente su sucursal.
+   */
+  const loadSucursales = async (usuario) => {
     try {
       const response = await api.get('/productos/sucursales')
       setSucursales(response.data)
-      // ADMINISTRADOR: su única sucursal es la que devuelve el backend
-      if (currentUser?.rol === 'ADMINISTRADOR' && response.data.length > 0) {
-        setMiSucursal(response.data[0])
+
+      if (usuario?.rol === 'ADMINISTRADOR') {
+        setMiSucursal(response.data.length > 0 ? response.data[0] : null)
       }
     } catch (err) {
       console.error('Error cargando sucursales:', err)
@@ -100,6 +122,58 @@ function Productos() {
       setCategorias(response.data)
     } catch (err) {
       console.error('Error cargando categorías:', err)
+    }
+  }
+
+  // --- Crear categoría desde el formulario de producto ---
+
+  const openCreateCategoryModal = () => {
+    setNewCategoryName('')
+    setCategoryError('')
+    setShowCategoryModal(true)
+  }
+
+  const closeCreateCategoryModal = () => {
+    setShowCategoryModal(false)
+    setNewCategoryName('')
+    setCategoryError('')
+    setCreatingCategory(false)
+  }
+
+  /**
+   * Crea la categoría y la selecciona automáticamente.
+   * El restaurante lo obtiene el backend desde el contexto del SUPERADMIN:
+   * nunca se envía restauranteId.
+   */
+  const handleCreateCategory = async (e) => {
+    e.preventDefault()
+    setCategoryError('')
+
+    const nombre = newCategoryName.trim()
+    if (!nombre) {
+      setCategoryError('El nombre de la categoría es obligatorio.')
+      return
+    }
+
+    const params = new URLSearchParams()
+    params.append('nombre', nombre)
+
+    setCreatingCategory(true)
+
+    try {
+      const response = await api.post('/categorias', params)
+      const creada = response.data
+
+      // Actualizar la lista y seleccionar la nueva categoría
+      setCategorias(prev => [...prev, creada].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setCategoriaId(String(creada.id))
+
+      closeCreateCategoryModal()
+      setSuccessMessage('Categoría creada correctamente.')
+      setTimeout(() => setSuccessMessage(''), 3000)
+    } catch (err) {
+      setCreatingCategory(false)
+      setCategoryError(obtenerMensajeError(err, 'No fue posible crear la categoría.'))
     }
   }
 
@@ -386,13 +460,14 @@ function Productos() {
                 <th>Descripción</th>
                 <th>Precio</th>
                 <th>{esSuperadmin() ? 'Catálogo' : 'Disponibilidad'}</th>
-                <th>Acciones</th>
+                {/* La configuración global del catálogo es exclusiva del SUPERADMIN */}
+                {esSuperadmin() && <th>Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {productos.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="text-center text-muted py-4">
+                  <td colSpan={esSuperadmin() ? 6 : 5} className="text-center text-muted py-4">
                     <i className="fa-solid fa-utensils fa-2x mb-2 d-block" style={{ color: '#ccc' }}></i>
                     No hay productos registrados
                   </td>
@@ -444,20 +519,19 @@ function Productos() {
                         </select>
                       )}
                     </td>
-                    <td>
-                      <div className="d-flex gap-1 flex-wrap">
-                        {esSuperadmin() && (
+                    {/* Configuración global del catálogo: solo SUPERADMIN */}
+                    {esSuperadmin() && (
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
                           <button className="btn btn-sm btn-outline-primary" title="Editar producto" onClick={() => openEditModal(producto)}>
                             <FiEdit2 />
                           </button>
-                        )}
-                        {esSuperadmin() && (
                           <button className="btn btn-sm btn-outline-danger" title="Eliminar producto" onClick={() => openDeleteModal(producto)}>
                             <FiTrash2 />
                           </button>
-                        )}
-                      </div>
-                    </td>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -555,12 +629,23 @@ function Productos() {
                       <select
                         className="form-select"
                         value={categoriaId}
-                        onChange={(e) => setCategoriaId(e.target.value)}
+                        onChange={(e) => {
+                          if (e.target.value === CREAR_CATEGORIA) {
+                            setCategoriaId('')
+                            openCreateCategoryModal()
+                          } else {
+                            setCategoriaId(e.target.value)
+                          }
+                        }}
                       >
                         <option value="">Sin categoría</option>
                         {categorias.map(c => (
                           <option key={c.id} value={c.id}>{c.nombre}</option>
                         ))}
+                        {/* Crear categoría: exclusiva del SUPERADMIN */}
+                        {esSuperadmin() && (
+                          <option value={CREAR_CATEGORIA}>+ Crear nueva categoría</option>
+                        )}
                       </select>
                     </div>
 
@@ -644,6 +729,61 @@ function Productos() {
                       ) : (
                         <><FiEdit2 style={{ marginRight: '5px' }} /> Guardar cambios</>
                       )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modal Crear Categoría */}
+      {showCategoryModal && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={closeCreateCategoryModal}
+            style={{
+              position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: 1060
+            }}
+          />
+          {/* Modal */}
+          <div className="modal show" style={{ display: 'block', zIndex: 1070 }} tabIndex="-1">
+            <div className="modal-dialog modal-sm">
+              <div className="modal-content">
+                <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+                  <h5 className="modal-title">Crear categoría</h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={closeCreateCategoryModal}></button>
+                </div>
+                <form onSubmit={handleCreateCategory}>
+                  <div className="modal-body">
+                    {categoryError && (
+                      <div className="alert alert-danger d-flex align-items-center py-2" role="alert">
+                        <i className="fa-solid fa-circle-exclamation me-2"></i>
+                        <div className="small">{categoryError}</div>
+                      </div>
+                    )}
+                    <label className="form-label small fw-semibold">Nombre</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Ej: Bebidas"
+                      required
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                    />
+                    <small className="text-muted">
+                      La categoría quedará asociada a su restaurante.
+                    </small>
+                  </div>
+                  <div className="modal-footer">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateCategoryModal}>
+                      <FiX style={{ marginRight: '5px' }} /> Cancelar
+                    </button>
+                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: '#1a3c34', color: 'white' }} disabled={creatingCategory}>
+                      {creatingCategory ? 'Creando...' : 'Crear categoría'}
                     </button>
                   </div>
                 </form>
