@@ -26,6 +26,10 @@ function Productos() {
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
+  // Modal de confirmación de eliminación
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [productoAEliminar, setProductoAEliminar] = useState(null)
+
   useEffect(() => {
     checkAuth()
   }, [])
@@ -92,6 +96,45 @@ function Productos() {
     setFormData({ nombre: '', descripcion: '', precio: '', imagen: '' })
     setSelectedProducto(null)
     setErrorMessage('')
+  }
+
+  // Abrir modal de confirmación de eliminación
+  const openDeleteModal = (producto) => {
+    setProductoAEliminar(producto)
+    setShowDeleteModal(true)
+  }
+
+  // Cerrar modal de confirmación
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false)
+    setProductoAEliminar(null)
+  }
+
+  // Confirmar eliminación
+  const confirmDelete = async () => {
+    if (!productoAEliminar) return
+
+    try {
+      await api.delete(`/productos/${productoAEliminar.id}`)
+      setSuccessMessage('Producto eliminado exitosamente')
+      closeDeleteModal()
+      await loadProductos()
+      setTimeout(() => setSuccessMessage(''), 3000)
+    } catch (err) {
+      if (err.response) {
+        if (err.response.status === 401) {
+          alert('No ha iniciado sesión')
+        } else if (err.response.status === 403) {
+          alert(err.response.data.error || 'No tiene permisos para eliminar este producto')
+        } else if (err.response.status === 404) {
+          alert('El producto no existe')
+        } else {
+          alert('Error al eliminar el producto')
+        }
+      } else {
+        alert('Error de conexión con el servidor')
+      }
+    }
   }
 
   // Manejar envío del formulario
@@ -208,7 +251,7 @@ function Productos() {
               alignItems: 'center',
               gap: '12px'
             }}>
-              <i className="fa-solid fa-utensils"></i> Producto
+              <i className="fa-solid fa-utensils"></i> Productos
             </a>
           </li>
           <li className="nav-item">
@@ -326,7 +369,7 @@ function Productos() {
                         <button className="btn btn-sm btn-outline-primary" title="Editar producto" onClick={() => openEditModal(producto)}>
                           <FiEdit2 />
                         </button>
-                        <button className="btn btn-sm btn-outline-danger" title="Eliminar producto" disabled>
+                        <button className="btn btn-sm btn-outline-danger" title="Eliminar producto" onClick={() => openDeleteModal(producto)}>
                           <FiTrash2 />
                         </button>
                       </div>
@@ -435,6 +478,52 @@ function Productos() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modal de Confirmación de Eliminación */}
+      {showDeleteModal && (
+        <>
+          {/* Backdrop / Overlay */}
+          <div 
+            onClick={closeDeleteModal}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 1040
+            }}
+          />
+          {/* Modal */}
+          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
+            <div className="modal-dialog modal-sm">
+              <div className="modal-content">
+                <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+                  <h5 className="modal-title">
+                    <FiTrash2 style={{ marginRight: '8px' }} /> Eliminar Producto
+                  </h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={closeDeleteModal}></button>
+                </div>
+                <div className="modal-body">
+                  <p>¿Estás seguro de que deseas eliminar este producto?</p>
+                  <p className="text-muted mb-0">
+                    <strong>{productoAEliminar?.nombre}</strong>
+                  </p>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={closeDeleteModal}>
+                    <FiX style={{ marginRight: '5px' }} /> Cancelar
+                  </button>
+                  <button type="button" className="btn btn-sm btn-danger" onClick={confirmDelete}>
+                    <FiTrash2 style={{ marginRight: '5px' }} /> Eliminar
+                  </button>
+                </div>
               </div>
             </div>
           </div>

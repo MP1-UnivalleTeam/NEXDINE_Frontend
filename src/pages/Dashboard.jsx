@@ -232,19 +232,6 @@ function Dashboard() {
               </a>
             </li>
           )}
-          {currentUser.rol !== 'CLIENTE' && (
-            <li className="nav-item">
-              <a href="#" className="nav-link" style={{
-                color: 'rgba(255,255,255,0.8)',
-                padding: '12px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                <i className="fa-solid fa-receipt"></i> Pedidos
-              </a>
-            </li>
-          )}
           {currentUser.rol === 'ADMINISTRADOR' && (
             <li className="nav-item">
               <a href="/productos" className="nav-link" style={{
@@ -255,6 +242,19 @@ function Dashboard() {
                 gap: '12px'
               }}>
                 <i className="fa-solid fa-utensils"></i> Productos
+              </a>
+            </li>
+          )}
+          {currentUser.rol !== 'CLIENTE' && (
+            <li className="nav-item">
+              <a href="#" className="nav-link" style={{
+                color: 'rgba(255,255,255,0.8)',
+                padding: '12px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <i className="fa-solid fa-receipt"></i> Pedidos
               </a>
             </li>
           )}
