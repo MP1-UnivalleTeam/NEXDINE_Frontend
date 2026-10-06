@@ -202,7 +202,7 @@ function Dashboard() {
         <ul className="nav flex-column mt-3">
           {currentUser.rol !== 'CLIENTE' && (
             <li className="nav-item">
-              <a href="#" className="nav-link" style={{
+              <a href="/dashboard" className="nav-link" style={{
                 backgroundColor: '#2c5a4d',
                 borderLeft: '4px solid #fff',
                 color: 'white',
@@ -213,6 +213,19 @@ function Dashboard() {
                 gap: '12px'
               }}>
                 <i className="fa-solid fa-users"></i> Usuarios
+              </a>
+            </li>
+          )}
+          {currentUser.rol === 'ADMINISTRADOR' && (
+            <li className="nav-item">
+              <a href="/productos" className="nav-link" style={{
+                color: 'rgba(255,255,255,0.8)',
+                padding: '12px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <i className="fa-solid fa-utensils"></i> Agregar Producto
               </a>
             </li>
           )}
