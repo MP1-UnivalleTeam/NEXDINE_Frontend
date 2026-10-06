@@ -24,8 +24,12 @@ function Login() {
     params.append('contraseña', contraseña)
 
     try {
-      await api.post('/login', params)
-      navigate('/dashboard')
+      const response = await api.post('/login', params)
+      navigate('/dashboard', {
+        state: {
+          successMessage: response.data?.message || 'Inicio de sesión exitoso'
+        }
+      })
     } catch (err) {
       if (err.response) {
         if (err.response.status === 401) {

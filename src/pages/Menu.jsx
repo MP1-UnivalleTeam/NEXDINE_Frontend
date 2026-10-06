@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../services/api.js'
+import Toast from '../components/Toast.jsx'
 
 function Menu() {
   const [searchParams] = useSearchParams()
@@ -9,6 +10,7 @@ function Menu() {
   const [token, setToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
     if (!mesa) {
@@ -24,6 +26,7 @@ function Menu() {
       const response = await api.get(`/api/menu?mesa=${mesa}`)
       setMenu(response.data.menu)
       setToken(response.data.token)
+      setSuccessMessage(response.data?.message || 'Sesión de mesa iniciada correctamente')
       localStorage.setItem('mesa_token', response.data.token)
       localStorage.setItem('mesa_id', mesa)
     } catch (err) {
@@ -46,7 +49,9 @@ function Menu() {
   }
 
   return (
-    <div className="container mt-4">
+    <>
+      <Toast message={successMessage} onClose={() => setSuccessMessage('')} />
+      <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Menú - Mesa {mesa}</h2>
         <span className="badge bg-success">Sesión activa</span>
@@ -73,7 +78,8 @@ function Menu() {
           Token de sesión: {token.substring(0, 8)}... | Mesa: {mesa}
         </small>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
 

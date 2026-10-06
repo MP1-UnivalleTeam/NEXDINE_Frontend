@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import api from '../services/api.js'
+import Toast from '../components/Toast.jsx'
 
 function Dashboard() {
   const [currentUser, setCurrentUser] = useState(null)
   const [users, setUsers] = useState([])
   const [searchedUser, setSearchedUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [successMessage, setSuccessMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
   const navigate = useNavigate()
+  const location = useLocation()
 
   // Formulario de creación
   const [newUser, setNewUser] = useState({
@@ -34,6 +38,13 @@ function Dashboard() {
   useEffect(() => {
     checkAuth()
   }, [])
+
+  useEffect(() => {
+    if (location.state?.successMessage) {
+      setSuccessMessage(location.state.successMessage)
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location, navigate])
 
   const checkAuth = async () => {
     try {
@@ -76,10 +87,12 @@ function Dashboard() {
 
     try {
       await api.post('/users/create', params)
+      setSuccessMessage('Usuario creado exitosamente')
+      setErrorMessage('')
       setNewUser({ nombre: '', contraseña: '', rol: 'COCINERO', celular: '', direccion: '' })
       await loadUsers()
     } catch (err) {
-      console.error('Error creando usuario:', err)
+      setErrorMessage(err.response?.data?.error || 'No fue posible crear el usuario')
     }
   }
 
@@ -115,10 +128,12 @@ function Dashboard() {
 
     try {
       await api.post('/users/edit', params)
+      setSuccessMessage('Usuario actualizado exitosamente')
+      setErrorMessage('')
       setShowEditModal(false)
       await loadUsers()
     } catch (err) {
-      console.error('Error editando usuario:', err)
+      setErrorMessage(err.response?.data?.error || 'No fue posible actualizar el usuario')
     }
   }
 
@@ -128,9 +143,11 @@ function Dashboard() {
     params.append('id', id)
     try {
       await api.post('/users/delete', params)
+      setSuccessMessage('Usuario eliminado exitosamente')
+      setErrorMessage('')
       await loadUsers()
     } catch (err) {
-      console.error('Error eliminando usuario:', err)
+      setErrorMessage(err.response?.data?.error || 'No fue posible eliminar el usuario')
     }
   }
 
@@ -139,9 +156,11 @@ function Dashboard() {
     params.append('id', id)
     try {
       await api.post('/users/toggle', params)
+      setSuccessMessage('Estado del usuario actualizado exitosamente')
+      setErrorMessage('')
       await loadUsers()
     } catch (err) {
-      console.error('Error cambiando estado:', err)
+      setErrorMessage(err.response?.data?.error || 'No fue posible actualizar el estado del usuario')
     }
   }
 
@@ -153,6 +172,7 @@ function Dashboard() {
 
   const getRoleBadge = (rol) => {
     const styles = {
+      SUPERADMIN: { bg: '#efe8ff', color: '#6f42c1', border: '#d6c5f0', icon: 'fa-crown', label: 'Superadmin' },
       ADMINISTRADOR: { bg: '#fde8e8', color: '#c0392b', border: '#f5c6cb', icon: 'fa-shield-halved', label: 'Administrador' },
       COCINERO: { bg: '#e8f0fe', color: '#1a56db', border: '#b8d0fb', icon: 'fa-fire-flame-curved', label: 'Cocinero' },
       MESERO: { bg: '#e8f0fe', color: '#1a56db', border: '#b8d0fb', icon: 'fa-bell-concierge', label: 'Mesero' },
@@ -176,7 +196,10 @@ function Dashboard() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden' }}>
+    <>
+      <Toast message={successMessage} onClose={() => setSuccessMessage('')} />
+      <Toast message={errorMessage} type="error" onClose={() => setErrorMessage('')} />
+      <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden' }}>
       {/* Sidebar */}
       <div style={{
         width: '260px',
@@ -213,6 +236,19 @@ function Dashboard() {
                 gap: '12px'
               }}>
                 <i className="fa-solid fa-users"></i> Usuarios
+              </a>
+            </li>
+          )}
+          {(currentUser.rol === 'ADMINISTRADOR' || currentUser.rol === 'SUPERADMIN') && (
+            <li className="nav-item">
+              <a href="/productos" className="nav-link" style={{
+                color: 'rgba(255,255,255,0.8)',
+                padding: '12px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <i className="fa-solid fa-utensils"></i> Productos
               </a>
             </li>
           )}
@@ -549,7 +585,8 @@ function Dashboard() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }
 
