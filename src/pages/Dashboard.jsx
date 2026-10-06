@@ -216,19 +216,6 @@ function Dashboard() {
               </a>
             </li>
           )}
-          {currentUser.rol === 'ADMINISTRADOR' && (
-            <li className="nav-item">
-              <a href="/productos" className="nav-link" style={{
-                color: 'rgba(255,255,255,0.8)',
-                padding: '12px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                <i className="fa-solid fa-utensils"></i> Agregar Producto
-              </a>
-            </li>
-          )}
           {currentUser.rol === 'CLIENTE' && (
             <li className="nav-item">
               <a href="/menu" className="nav-link" style={{
