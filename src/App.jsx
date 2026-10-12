@@ -5,21 +5,30 @@ import Menu from './pages/Menu.jsx'
 import Productos from './pages/Productos.jsx'
 import Mesas from './pages/Mesas.jsx'
 import Sucursales from './pages/Sucursales.jsx'
+import Carrito from './pages/Carrito.jsx'
+import PedidoInvitado from './pages/PedidoInvitado.jsx'
+import ResumenPedido from './pages/ResumenPedido.jsx'
+import { CarritoProvider } from './context/CarritoContext.jsx'
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/menu" element={<Menu />} />
-        <Route path="/menu/:slug" element={<Menu />} />
-        <Route path="/productos" element={<Productos />} />
-        <Route path="/mesas" element={<Mesas />} />
-        <Route path="/sucursales" element={<Sucursales />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+      <CarritoProvider>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/menu" element={<Menu />} />
+          <Route path="/menu/:slug" element={<Menu />} />
+          <Route path="/productos" element={<Productos />} />
+          <Route path="/mesas" element={<Mesas />} />
+          <Route path="/sucursales" element={<Sucursales />} />
+          <Route path="/carrito" element={<Carrito />} />
+          <Route path="/pedido" element={<PedidoInvitado />} />
+          <Route path="/resumen/:pedidoId" element={<ResumenPedido />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </CarritoProvider>
     </BrowserRouter>
   )
 }

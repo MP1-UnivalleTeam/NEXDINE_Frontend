@@ -1,9 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useSearchParams, useParams } from 'react-router-dom'
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
+import { FiShoppingCart } from 'react-icons/fi'
 import api from '../services/api.js'
 import BuscadorProductos from '../components/BuscadorProductos.jsx'
 import SelectorTipoServicio, { TIPOS_SERVICIO } from '../components/SelectorTipoServicio.jsx'
+import ModalPersonalizacion from '../components/ModalPersonalizacion.jsx'
+import Sugerencias from '../components/Sugerencias.jsx'
 import { filtrarMenu, contarProductos } from '../utils/buscadorProductos.js'
+import { useCarrito } from '../context/CarritoContext.jsx'
 
 const CLAVE_TOKEN = 'sessionToken'
 const CLAVE_MESA = 'mesaCodigo'
@@ -28,6 +32,7 @@ const menuSinCambios = (actual, nuevo) => {
 function Menu() {
   const [searchParams] = useSearchParams()
   const { slug } = useParams()
+  const navigate = useNavigate()
 
   // Dos flujos coexistentes e independientes:
   //   /menu?mesa=<codigo>  → QR de mesa (con sesión temporal)
@@ -49,6 +54,12 @@ function Menu() {
   // RF003 — Tipo de servicio
   const [tipoServicio, setTipoServicio] = useState(null)
   const [errorTipoServicio, setErrorTipoServicio] = useState('')
+
+  // RF020 — Modal de personalización
+  const [productoParaPersonalizar, setProductoParaPersonalizar] = useState(null)
+
+  // Carrito
+  const { agregarItem, totalItems } = useCarrito()
 
   useEffect(() => {
     if (esMenuPublico) {
@@ -324,7 +335,21 @@ function Menu() {
             ? nombreRestaurante || 'Menú'
             : `Menú${nombreMesa ? ` — ${nombreMesa}` : ''}`}
         </h2>
-        {!esMenuPublico && <span className="badge bg-success">Sesión activa</span>}
+        <div className="d-flex align-items-center gap-2">
+          {!esMenuPublico && <span className="badge bg-success">Sesión activa</span>}
+          {totalItems > 0 && (
+            <button
+              className="btn btn-sm position-relative"
+              style={{ backgroundColor: '#1a3c34', color: 'white' }}
+              onClick={() => navigate('/carrito')}
+            >
+              <FiShoppingCart />
+              <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                {totalItems}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* RF003 — Tipo de servicio.
@@ -371,7 +396,11 @@ function Menu() {
             <div className="row mt-2">
               {categoria.productos.map(item => (
                 <div key={item.id} className="col-md-4 mb-3">
-                  <div className="card h-100">
+                  <div
+                    className="card h-100"
+                    style={{ cursor: item.disponible ? 'pointer' : 'default' }}
+                    onClick={() => item.disponible && setProductoParaPersonalizar(item)}
+                  >
                     {item.imagen ? (
                       <img src={item.imagen} className="card-img-top" alt={item.nombre}
                         style={{ height: '180px', objectFit: 'cover' }} />
@@ -390,6 +419,11 @@ function Menu() {
                       {!item.disponible && (
                         <span className="badge bg-danger">No disponible</span>
                       )}
+                      {item.disponible && (
+                        <span className="text-success small">
+                          <i className="fa-solid fa-plus me-1"></i>Clic para personalizar
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -403,6 +437,26 @@ function Menu() {
         <div className="mt-4 p-3 bg-light rounded">
           <small className="text-muted">Mesa: {nombreMesa || codigoMesa}</small>
         </div>
+      )}
+
+      {/* RF020 — Modal de personalización */}
+      {productoParaPersonalizar && (
+        <ModalPersonalizacion
+          producto={productoParaPersonalizar}
+          onAgregar={(prod, ops, cant) => {
+            agregarItem(prod, ops, cant)
+            setProductoParaPersonalizar(null)
+          }}
+          onCerrar={() => setProductoParaPersonalizar(null)}
+        />
+      )}
+
+      {/* RF034 — Sugerencias */}
+      {menuFiltrado.length > 0 && (
+        <Sugerencias
+          productoActual={menuFiltrado[0]?.productos[0]}
+          onAgregar={() => {}}
+        />
       )}
     </div>
   )

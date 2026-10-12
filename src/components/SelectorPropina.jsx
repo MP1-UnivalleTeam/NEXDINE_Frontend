@@ -1,0 +1,94 @@
+import { useState } from 'react'
+import { FiDollarSign } from 'react-icons/fi'
+import { useCarrito } from '../context/CarritoContext.jsx'
+
+/**
+ * RF039 — Selector de propina.
+ *
+ * Heurísticas de Nielsen:
+ *   · Visibilidad del estado: total actualizado inmediatamente.
+ *   · Control y libertad: elegir porcentaje, valor o ninguna.
+ *   · Prevención de errores: validar rango de valor personalizado.
+ *   · Coincidencia: opciones comunes en restaurantes (5%, 10%, 15%).
+ */
+const PORCENTAJES = [5, 10, 15]
+
+function SelectorPropina() {
+  const { propina, setPropina, subtotal } = useCarrito()
+  const [valorCustom, setValorCustom] = useState('')
+
+  const handlePorcentaje = (pct) => {
+    const valor = Math.round(subtotal * pct / 100)
+    setPropina({ tipo: 'porcentaje', porcentaje: pct, valor })
+  }
+
+  const handleCustom = () => {
+    const valor = parseInt(valorCustom)
+    if (isNaN(valor) || valor < 0) return
+    setPropina({ tipo: 'personalizada', valor })
+  }
+
+  const handleNinguna = () => {
+    setPropina({ tipo: 'ninguna', valor: 0 })
+    setValorCustom('')
+  }
+
+  return (
+    <div className="card mb-3" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+      <div className="card-body">
+        <h6 className="mb-2">
+          <FiDollarSign style={{ marginRight: '6px', color: '#1a3c34' }} />
+          Propina
+        </h6>
+
+        <div className="row g-2 mb-2">
+          {PORCENTAJES.map(pct => (
+            <div key={pct} className="col-4">
+              <button
+                type="button"
+                className="btn btn-sm w-100"
+                style={{
+                  backgroundColor: propina.tipo === 'porcentaje' && propina.porcentaje === pct ? '#1a3c34' : '#fff',
+                  color: propina.tipo === 'porcentaje' && propina.porcentaje === pct ? '#fff' : '#1a3c34',
+                  border: '1px solid #1a3c34'
+                }}
+                onClick={() => handlePorcentaje(pct)}
+              >
+                {pct}%
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="input-group input-group-sm mb-2">
+          <span className="input-group-text">$</span>
+          <input
+            type="number"
+            className="form-control"
+            placeholder="Otro valor"
+            value={valorCustom}
+            onChange={(e) => setValorCustom(e.target.value)}
+            onBlur={handleCustom}
+          />
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-sm btn-outline-secondary w-100"
+          onClick={handleNinguna}
+        >
+          Sin propina
+        </button>
+
+        {propina.valor > 0 && (
+          <small className="text-success d-block mt-2">
+            <i className="fa-solid fa-check me-1"></i>
+            Propina: ${propina.valor.toLocaleString('es-CO')}
+          </small>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default SelectorPropina
