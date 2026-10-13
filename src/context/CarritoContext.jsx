@@ -1,77 +1,118 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 
-/**
- * Contexto global del carrito.
- *
- * Mantiene el estado del carrito entre páginas (Menú → Carrito → Resumen)
- * y aplica las heurísticas de Nielsen:
- *   · Visibilidad del estado: se puede ver siempre cuántos productos hay.
- *   · Control y libertad: se puede quitar productos o vaciar el carrito.
- *   · Consistencia: mismos precios y datos que muestra el Menú.
- *   · Prevención de errores: no se permiten cantidades inválidas.
- */
 const CarritoContext = createContext(null)
 
+const STORAGE_KEY = 'nexdine_carrito'
+
+function cargarDeStorage() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return { items: [], cupon: null, propina: { tipo: 'ninguna', valor: 0 } }
+    const data = JSON.parse(raw)
+    return {
+      items: Array.isArray(data.items) ? data.items : [],
+      cupon: data.cupon || null,
+      propina: data.propina || { tipo: 'ninguna', valor: 0 }
+    }
+  } catch {
+    return { items: [], cupon: null, propina: { tipo: 'ninguna', valor: 0 } }
+  }
+}
+
 export function CarritoProvider({ children }) {
-  const [items, setItems] = useState([])
-  const [cupon, setCupon] = useState(null)
-  const [propina, setPropina] = useState({ tipo: 'ninguna', valor: 0 })
-  const [tipoServicio, setTipoServicio] = useState(null)
+  const [state, setState] = useState(cargarDeStorage)
+
+  const guardarEnStorage = useCallback((nuevoState) => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nuevoState))
+    } catch { /* storage lleno o no disponible */ }
+  }, [])
 
   const agregarItem = useCallback((producto, opciones = [], cantidad = 1) => {
     if (!producto || cantidad < 1) return
 
-    const precioUnitario = producto.precio
+    const precioUnitario = producto.precio || 0
     const adicionalOpciones = opciones.reduce((sum, o) => sum + (o.precio || 0), 0)
 
-    setItems(prev => {
+    setState(prev => {
       const key = `${producto.id}-${JSON.stringify(opciones.map(o => o.id).sort())}`
-      const existente = prev.find(i => i.key === key)
+      const existente = prev.items.find(i => i.key === key)
+      let newItems
       if (existente) {
-        return prev.map(i => i.key === key ? { ...i, cantidad: i.cantidad + cantidad } : i)
+        newItems = prev.items.map(i => i.key === key ? { ...i, cantidad: i.cantidad + cantidad } : i)
+      } else {
+        newItems = [...prev.items, { key, producto, opciones, cantidad, precioUnitario, adicionalOpciones }]
       }
-      return [...prev, {
-        key,
-        producto,
-        opciones,
-        cantidad,
-        precioUnitario,
-        adicionalOpciones
-      }]
+      const newState = { ...prev, items: newItems }
+      guardarEnStorage(newState)
+      return newState
     })
-  }, [])
+  }, [guardarEnStorage])
 
   const quitarItem = useCallback((key) => {
-    setItems(prev => prev.filter(i => i.key !== key))
-  }, [])
+    setState(prev => {
+      const newState = { ...prev, items: prev.items.filter(i => i.key !== key) }
+      guardarEnStorage(newState)
+      return newState
+    })
+  }, [guardarEnStorage])
 
   const actualizarCantidad = useCallback((key, cantidad) => {
     if (cantidad < 1) return
-    setItems(prev => prev.map(i => i.key === key ? { ...i, cantidad } : i))
-  }, [])
+    setState(prev => {
+      const newState = {
+        ...prev,
+        items: prev.items.map(i => i.key === key ? { ...i, cantidad } : i)
+      }
+      guardarEnStorage(newState)
+      return newState
+    })
+  }, [guardarEnStorage])
 
   const vaciarCarrito = useCallback(() => {
-    setItems([])
-    setCupon(null)
-    setPropina({ tipo: 'ninguna', valor: 0 })
+    setState({ items: [], cupon: null, propina: { tipo: 'ninguna', valor: 0 } })
+    sessionStorage.removeItem(STORAGE_KEY)
   }, [])
 
-  const aplicarCupon = useCallback((codigo) => {
-    setCupon({ codigo, descuento: 0 })
-  }, [])
+  const aplicarCupon = useCallback((codigo, descuento = 0) => {
+    setState(prev => {
+      const newState = { ...prev, cupon: { codigo, descuento } }
+      guardarEnStorage(newState)
+      return newState
+    })
+  }, [guardarEnStorage])
 
   const quitarCupon = useCallback(() => {
-    setCupon(null)
-  }, [])
+    setState(prev => {
+      const newState = { ...prev, cupon: null }
+      guardarEnStorage(newState)
+      return newState
+    })
+  }, [guardarEnStorage])
 
-  const totalItems = items.reduce((sum, i) => sum + i.cantidad, 0)
-  const subtotal = items.reduce((sum, i) => sum + (i.precioUnitario + i.adicionalOpciones) * i.cantidad, 0)
+  const setPropina = useCallback((nuevaPropina) => {
+    setState(prev => {
+      const newState = { ...prev, propina: nuevaPropina }
+      guardarEnStorage(newState)
+      return newState
+    })
+  }, [guardarEnStorage])
+
+  const totalItems = useMemo(
+    () => state.items.reduce((sum, i) => sum + i.cantidad, 0),
+    [state.items]
+  )
+
+  const subtotal = useMemo(
+    () => state.items.reduce((sum, i) => sum + (i.precioUnitario + i.adicionalOpciones) * i.cantidad, 0),
+    [state.items]
+  )
 
   const value = {
-    items,
-    cupon,
-    propina,
-    tipoServicio,
+    items: state.items,
+    cupon: state.cupon,
+    propina: state.propina,
+    tipoServicio: state.tipoServicio,
     totalItems,
     subtotal,
     agregarItem,
@@ -80,8 +121,7 @@ export function CarritoProvider({ children }) {
     vaciarCarrito,
     aplicarCupon,
     quitarCupon,
-    setPropina,
-    setTipoServicio
+    setPropina
   }
 
   return (

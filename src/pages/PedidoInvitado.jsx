@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FiArrowLeft, FiUser, FiMapPin, FiPhone } from 'react-icons/fi'
-import { crearPedidoInvitado } from '../services/pedidos.js'
+import { crearPedidoInvitado, agregarItemPedido, confirmarPedido } from '../services/pedidos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { obtenerMensajeError } from '../services/mensajes.js'
 
@@ -17,7 +17,7 @@ import { obtenerMensajeError } from '../services/mensajes.js'
  */
 function PedidoInvitado() {
   const navigate = useNavigate()
-  const { items, subtotal, propina, vaciarCarrito } = useCarrito()
+  const { items, subtotal, propina, cupon, vaciarCarrito } = useCarrito()
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -62,7 +62,18 @@ function PedidoInvitado() {
         referencia: formData.referencia.trim()
       })
 
-      setPedidoConfirmado(pedido)
+      // Agregar items al pedido
+      for (const item of items) {
+        await agregarItemPedido(pedido.id, item)
+      }
+
+      // Confirmar con propina y cupón
+      const pedidoFinal = await confirmarPedido(pedido.id, {
+        propina: propina.valor > 0 ? propina : null,
+        cuponCodigo: cupon?.codigo
+      })
+
+      setPedidoConfirmado(pedidoFinal)
       vaciarCarrito()
     } catch (err) {
       setError(obtenerMensajeError(err, 'No fue posible crear el pedido. Intente nuevamente.'))

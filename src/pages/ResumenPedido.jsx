@@ -83,7 +83,7 @@ function ResumenPedido() {
           <div className="card mb-3" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
             <div className="card-body">
               <h6 className="mb-3">Productos</h6>
-              {resumen.items?.map((item, idx) => (
+              {(Array.isArray(resumen.items) ? resumen.items : []).map((item, idx) => (
                 <div key={idx} className="d-flex justify-content-between align-items-start mb-3 pb-3 border-bottom">
                   <div>
                     <strong>{item.cantidad}x {item.nombre}</strong>
@@ -94,7 +94,7 @@ function ResumenPedido() {
                     )}
                   </div>
                   <span className="text-end">
-                    ${(item.precioUnitario * item.cantidad).toLocaleString('es-CO')}
+                    ${((item.precioUnitario || 0) * (item.cantidad || 1)).toLocaleString('es-CO')}
                   </span>
                 </div>
               ))}
@@ -113,31 +113,31 @@ function ResumenPedido() {
                 <span>${resumen.subtotal?.toLocaleString('es-CO') || '0'}</span>
               </div>
 
-              {resumen.descuento > 0 && (
+              {(resumen.descuento || 0) > 0 && (
                 <div className="d-flex justify-content-between mb-2 text-success">
                   <span>Descuento</span>
-                  <span>-${resumen.descuento.toLocaleString('es-CO')}</span>
+                  <span>-${(resumen.descuento || 0).toLocaleString('es-CO')}</span>
                 </div>
               )}
 
-              {resumen.cargos > 0 && (
+              {(resumen.cargos || 0) > 0 && (
                 <div className="d-flex justify-content-between mb-2">
                   <span className="text-muted">Cargos</span>
-                  <span>${resumen.cargos.toLocaleString('es-CO')}</span>
+                  <span>${(resumen.cargos || 0).toLocaleString('es-CO')}</span>
                 </div>
               )}
 
-              {resumen.propina > 0 && (
+              {(resumen.propina || 0) > 0 && (
                 <div className="d-flex justify-content-between mb-2">
                   <span className="text-muted">Propina</span>
-                  <span>${resumen.propina.toLocaleString('es-CO')}</span>
+                  <span>${(resumen.propina || 0).toLocaleString('es-CO')}</span>
                 </div>
               )}
 
-              {resumen.impuestos > 0 && (
+              {(resumen.impuestos || 0) > 0 && (
                 <div className="d-flex justify-content-between mb-2">
                   <span className="text-muted">Impuestos</span>
-                  <span>${resumen.impuestos.toLocaleString('es-CO')}</span>
+                  <span>${(resumen.impuestos || 0).toLocaleString('es-CO')}</span>
                 </div>
               )}
 
@@ -145,7 +145,7 @@ function ResumenPedido() {
               <div className="d-flex justify-content-between">
                 <strong>Total</strong>
                 <strong style={{ color: '#1a3c34', fontSize: '1.2rem' }}>
-                  ${resumen.total?.toLocaleString('es-CO') || '0'}
+                  ${(resumen.total || 0).toLocaleString('es-CO')}
                 </strong>
               </div>
             </div>
