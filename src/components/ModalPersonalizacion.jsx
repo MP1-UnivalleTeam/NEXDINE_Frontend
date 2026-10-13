@@ -25,11 +25,14 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
   }, [producto])
 
   const cargarOpciones = async () => {
+    setError('')
     try {
       const data = await obtenerOpcionesProducto(producto.id)
-      setOpciones(data)
+      setOpciones(Array.isArray(data) ? data : [])
     } catch (err) {
-      setError('No se pudieron cargar las opciones. Intente nuevamente.')
+      // Si no hay endpoint, simplemente sin opciones
+      setOpciones([])
+      setError('')
     } finally {
       setLoading(false)
     }
@@ -77,6 +80,11 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
                 <div className="text-center py-4">
                   <div className="spinner-border spinner-border-sm" style={{ color: '#1a3c34' }}></div>
                   <p className="text-muted small mt-2">Cargando opciones...</p>
+                </div>
+              ) : error ? (
+                <div className="text-center py-3">
+                  <p className="text-muted mb-2">No se pudieron cargar las opciones.</p>
+                  <small className="text-muted">Puedes agregar el producto sin personalización.</small>
                 </div>
               ) : opciones.length === 0 ? (
                 <p className="text-muted text-center py-3">Este producto no tiene opciones de personalización.</p>
