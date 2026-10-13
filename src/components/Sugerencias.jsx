@@ -18,9 +18,9 @@ function Sugerencias({ productoActual, onAgregar }) {
   const { agregarItem } = useCarrito()
 
   useEffect(() => {
-    if (!productoActual) return
+    if (!productoActual?.id) return
     cargarSugerencias()
-  }, [productoActual])
+  }, [productoActual?.id])
 
   const cargarSugerencias = async () => {
     try {

@@ -93,9 +93,13 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
               </li>
             )}
             <li className="nav-item">
-              <a href="#" className="nav-link" style={LINK_BASE}>
+              <span
+                className="nav-link"
+                style={{ ...LINK_BASE, opacity: 0.5, cursor: 'not-allowed' }}
+                title="Próximamente"
+              >
                 <i className="fa-solid fa-receipt"></i> Pedidos
-              </a>
+              </span>
             </li>
             <li className="nav-item">
               <a href="#" className="nav-link" style={LINK_BASE}>

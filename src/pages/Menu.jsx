@@ -451,10 +451,10 @@ function Menu() {
         />
       )}
 
-      {/* RF034 — Sugerencias */}
-      {menuFiltrado.length > 0 && (
+      {/* RF034 — Sugerencias (solo menú QR, no público) */}
+      {!esMenuPublico && menuFiltrado.length > 0 && menuFiltrado[0]?.productos?.length > 0 && (
         <Sugerencias
-          productoActual={menuFiltrado[0]?.productos[0]}
+          productoActual={menuFiltrado[0].productos[0]}
           onAgregar={() => {}}
         />
       )}

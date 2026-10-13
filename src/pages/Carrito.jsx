@@ -144,7 +144,7 @@ function Carrito() {
                 {cupon && (
                   <div className="d-flex justify-content-between mb-2 text-success">
                     <span>Descuento ({cupon.codigo})</span>
-                    <span>-${cupon.descuento?.toLocaleString('es-CO') || '0'}</span>
+                    <span>-${(cupon.descuento || 0).toLocaleString('es-CO')}</span>
                   </div>
                 )}
                 {propina.valor > 0 && (
