@@ -38,6 +38,14 @@ function Carrito() {
             <FiArrowLeft style={{ marginRight: '5px' }} /> Volver al menú
           </button>
         </div>
+
+        {/* Cupón y propina visibles incluso con carrito vacío */}
+        <div className="row mt-4">
+          <div className="col-lg-8">
+            <CuponDescuento />
+            <SelectorPropina />
+          </div>
+        </div>
       </div>
     )
   }

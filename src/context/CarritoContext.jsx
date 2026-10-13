@@ -6,7 +6,7 @@ const STORAGE_KEY = 'nexdine_carrito'
 
 function cargarDeStorage() {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { items: [], cupon: null, propina: { tipo: 'ninguna', valor: 0 } }
     const data = JSON.parse(raw)
     return {

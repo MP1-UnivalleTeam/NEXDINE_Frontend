@@ -27,8 +27,13 @@ function ResumenPedido() {
     try {
       const data = await obtenerResumenPedido(pedidoId)
       setResumen(data)
+      setError('')
     } catch (err) {
-      setError('No se pudo cargar el resumen. Intente nuevamente.')
+      if (err.response?.status === 404) {
+        setError('Pedido no encontrado. Verifique el número de seguimiento.')
+      } else {
+        setError('No se pudo cargar el resumen. Intente nuevamente.')
+      }
     } finally {
       setLoading(false)
     }
