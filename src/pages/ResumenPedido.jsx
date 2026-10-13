@@ -83,7 +83,7 @@ function ResumenPedido() {
       </div>
 
       <div className="row">
-        <div className="col-lg-8">
+        <div className="col-12 col-lg-8">
           {/* Líneas del pedido */}
           <div className="card mb-3" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
             <div className="card-body">
@@ -94,6 +94,7 @@ function ResumenPedido() {
                     <strong>{item.cantidad}x {item.nombre}</strong>
                     {item.personalizaciones?.length > 0 && (
                       <small className="text-muted d-block">
+                        <i className="fa-solid fa-pen me-1"></i>
                         {item.personalizaciones.join(', ')}
                       </small>
                     )}
@@ -156,6 +157,17 @@ function ResumenPedido() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Botón volver a editar */}
+      <div className="mt-4 d-flex gap-2 flex-wrap">
+        <button
+          className="btn flex-grow-1 flex-md-grow-0"
+          style={{ backgroundColor: '#1a3c34', color: 'white' }}
+          onClick={() => navigate('/carrito')}
+        >
+          <FiArrowLeft style={{ marginRight: '5px' }} /> Volver a editar
+        </button>
       </div>
     </div>
   )

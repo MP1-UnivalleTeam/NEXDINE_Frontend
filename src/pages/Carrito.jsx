@@ -127,7 +127,7 @@ function Carrito() {
             <FiTrash2 style={{ marginRight: '5px' }} /> Vaciar carrito
           </button>
 
-          {/* Sugerencias */}
+          {/* Sugerencias - siempre visibles */}
           {items.length > 0 && (
             <Sugerencias
               productoActual={items[items.length - 1].producto}
