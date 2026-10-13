@@ -303,15 +303,28 @@ function PedidoInvitado() {
               ))}
               <hr />
               <div className="d-flex justify-content-between">
-                <strong>Subtotal</strong>
-                <strong>${subtotal.toLocaleString('es-CO')}</strong>
+                <span className="text-muted">Subtotal</span>
+                <span>${subtotal.toLocaleString('es-CO')}</span>
               </div>
+              {cupon && (
+                <div className="d-flex justify-content-between mt-1 text-success">
+                  <span>Descuento ({cupon.codigo})</span>
+                  <span>-${(cupon.descuento || 0).toLocaleString('es-CO')}</span>
+                </div>
+              )}
               {propina.valor > 0 && (
                 <div className="d-flex justify-content-between mt-1">
                   <span className="text-muted">Propina</span>
                   <span>${propina.valor.toLocaleString('es-CO')}</span>
                 </div>
               )}
+              <hr />
+              <div className="d-flex justify-content-between">
+                <strong>Total</strong>
+                <strong style={{ color: '#1a3c34' }}>
+                  ${(subtotal + propina.valor - (cupon?.descuento || 0)).toLocaleString('es-CO')}
+                </strong>
+              </div>
             </div>
           </div>
         </div>
