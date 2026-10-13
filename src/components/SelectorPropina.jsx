@@ -81,10 +81,15 @@ function SelectorPropina() {
         </button>
 
         {propina.valor > 0 && (
-          <small className="text-success d-block mt-2">
-            <i className="fa-solid fa-check me-1"></i>
-            Propina: ${propina.valor.toLocaleString('es-CO')}
-          </small>
+          <div className="d-flex justify-content-between align-items-center mt-2 p-2 bg-success-subtle rounded">
+            <small className="text-success">
+              <i className="fa-solid fa-check me-1"></i>
+              Propina: ${propina.valor.toLocaleString('es-CO')}
+            </small>
+            <small className="text-muted">
+              Total: ${(subtotal + propina.valor).toLocaleString('es-CO')}
+            </small>
+          </div>
         )}
       </div>
     </div>

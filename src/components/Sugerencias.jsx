@@ -15,18 +15,25 @@ import { useCarrito } from '../context/CarritoContext.jsx'
 function Sugerencias({ productoActual, onAgregar }) {
   const [sugerencias, setSugerencias] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const { agregarItem } = useCarrito()
 
   useEffect(() => {
-    if (!productoActual?.id) return
+    if (!productoActual?.id) {
+      setLoading(false)
+      return
+    }
     cargarSugerencias()
   }, [productoActual?.id])
 
   const cargarSugerencias = async () => {
+    setLoading(true)
+    setError(false)
     try {
       const data = await obtenerSugerencias(productoActual.id)
-      setSugerencias(data || [])
+      setSugerencias(Array.isArray(data) ? data : [])
     } catch (err) {
+      setError(true)
       setSugerencias([])
     } finally {
       setLoading(false)
@@ -34,6 +41,7 @@ function Sugerencias({ productoActual, onAgregar }) {
   }
 
   const handleAgregar = (producto) => {
+    if (!producto?.id) return
     agregarItem(producto, [], 1)
     if (onAgregar) onAgregar(producto)
   }
@@ -42,6 +50,16 @@ function Sugerencias({ productoActual, onAgregar }) {
     return (
       <div className="text-center py-3">
         <div className="spinner-border spinner-border-sm" style={{ color: '#1a3c34' }}></div>
+        <small className="text-muted d-block mt-1">Cargando sugerencias...</small>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-3 text-muted">
+        <i className="fa-solid fa-triangle-exclamation me-1"></i>
+        No se pudieron cargar las sugerencias
       </div>
     )
   }
@@ -76,7 +94,7 @@ function Sugerencias({ productoActual, onAgregar }) {
               <div className="card-body p-2">
                 <h6 className="card-title small mb-1">{producto.nombre}</h6>
                 <p className="card-text small text-muted mb-1">
-                  ${parseFloat(producto.precio).toLocaleString('es-CO')}
+                  ${parseFloat(producto.precio || 0).toLocaleString('es-CO')}
                 </p>
                 {!producto.disponible && (
                   <span className="badge bg-danger" style={{ fontSize: '0.65rem' }}>No disponible</span>

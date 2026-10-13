@@ -57,7 +57,11 @@ function CuponDescuento() {
               <span className="badge bg-success me-2">
                 <FiCheck style={{ marginRight: '4px' }} />{cupon.codigo}
               </span>
-              <small className="text-muted">Cupón aplicado</small>
+              <small className="text-muted">
+                {cupon.descuento > 0
+                  ? `Descuento: $${cupon.descuento.toLocaleString('es-CO')}`
+                  : 'Cupón aplicado'}
+              </small>
             </div>
             <button
               type="button"
