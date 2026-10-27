@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiPlus, FiEdit2, FiX, FiTrash2 } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiX, FiTrash2, FiCamera, FiUploadCloud, FiCheckCircle, FiXCircle, FiAlertTriangle } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import CargadorImagen from '../components/CargadorImagen.jsx'
 import { obtenerMensajeError, MENSAJES, CARGANDO } from '../services/mensajes.js'
+import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, input, cifrasTabulares } from '../styles/tokens.js'
 
 function Productos() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -28,12 +30,22 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
-    precio: '',
-    imagen: ''
+    precio: ''
   })
+
+  // Imagen del producto (CargadorImagen)
+  const [archivoImagen, setArchivoImagen] = useState(null)
+  const [previewImagen, setPreviewImagen] = useState(null)
+  const [urlImagenManual, setUrlImagenManual] = useState('')
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  // Límites del backend (GET /productos/imagenes/config)
+  const [configImagen, setConfigImagen] = useState({ maxBytes: 5 * 1024 * 1024 })
 
   // Checklist de sucursales donde se ofrece el producto
   const [selectedSucursales, setSelectedSucursales] = useState([])
+  const [loadingSucursalesProducto, setLoadingSucursalesProducto] = useState(false)
+  const [errorSucursalesProducto, setErrorSucursalesProducto] = useState('')
+  const solicitudSucursalesRef = useRef(0)
 
   // Loading del envío
   const [saving, setSaving] = useState(false)
@@ -64,6 +76,31 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   useEffect(() => {
     checkAuth()
   }, [])
+
+  useEffect(() => {
+    if (!showModal && !showUploadModal && !showCategoryModal && !showDeleteModal) return
+
+    const manejarEscape = (evento) => {
+      if (evento.key !== 'Escape') return
+      evento.preventDefault()
+
+      if (showUploadModal) {
+        setShowUploadModal(false)
+      } else if (showCategoryModal && !creatingCategory) {
+        closeCreateCategoryModal()
+      } else if (showDeleteModal && !deleting) {
+        closeDeleteModal()
+      } else if (showModal && !saving) {
+        closeModal()
+      }
+    }
+
+    window.addEventListener('keydown', manejarEscape)
+    return () => window.removeEventListener('keydown', manejarEscape)
+  }, [
+    showModal, showUploadModal, showCategoryModal, showDeleteModal,
+    creatingCategory, deleting, saving
+  ])
 
   const checkAuth = async () => {
     try {
@@ -125,6 +162,22 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
     }
   }
 
+  /** Límites reales de la integración de imágenes (Cloudinary + validador). */
+  const loadConfigImagen = async () => {
+    try {
+      const response = await api.get('/productos/imagenes/config')
+      if (response.data?.tamanoMaximoBytes) {
+        setConfigImagen({
+          maxBytes: response.data.tamanoMaximoBytes,
+          cloudinaryDisponible: response.data.cloudinaryDisponible
+        })
+      }
+    } catch (err) {
+      // Configuración por defecto (5 MB); el backend igual valida al guardar
+      console.error('Error cargando configuración de imágenes:', err)
+    }
+  }
+
   // --- Crear categoría desde el formulario de producto ---
 
   const openCreateCategoryModal = () => {
@@ -182,12 +235,28 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
    * que el checklist al editar NO aparezca vacío por defecto.
    */
   const cargarSucursalesDeProducto = async (productoId) => {
+    const solicitud = ++solicitudSucursalesRef.current
+    setLoadingSucursalesProducto(true)
+    setErrorSucursalesProducto('')
     try {
       const response = await api.get(`/productos/${productoId}/sucursales`)
-      setSelectedSucursales(response.data || [])
+      if (!Array.isArray(response.data)) {
+        throw new Error('La respuesta de sucursales no tiene el formato esperado.')
+      }
+      if (solicitud === solicitudSucursalesRef.current) {
+        setSelectedSucursales(response.data.map(String))
+      }
     } catch (err) {
-      console.error('Error cargando sucursales del producto:', err)
-      setSelectedSucursales([])
+      if (solicitud === solicitudSucursalesRef.current) {
+        setSelectedSucursales([])
+        setErrorSucursalesProducto(
+          obtenerMensajeError(err, 'No fue posible cargar las sucursales del producto.')
+        )
+      }
+    } finally {
+      if (solicitud === solicitudSucursalesRef.current) {
+        setLoadingSucursalesProducto(false)
+      }
     }
   }
 
@@ -229,55 +298,116 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
     navigate('/login')
   }
 
+  // --- Gestión de la imagen en el formulario ---
+
+  const abrirCargadorImagen = () => {
+    setShowUploadModal(true)
+  }
+
+  const quitarImagenSeleccionada = () => {
+    if (previewImagen) {
+      URL.revokeObjectURL(previewImagen)
+    }
+    setPreviewImagen(null)
+    setArchivoImagen(null)
+    setUrlImagenManual('')
+  }
+
+  const asignarArchivo = (archivo) => {
+    if (archivo === null) {
+      quitarImagenSeleccionada()
+      return
+    }
+    if (previewImagen) {
+      URL.revokeObjectURL(previewImagen)
+    }
+    setArchivoImagen(archivo)
+    setPreviewImagen(URL.createObjectURL(archivo))
+    setUrlImagenManual('')
+  }
+
+  const asignarUrlManual = (url) => {
+    if (!url) return
+    quitarImagenSeleccionada()
+    setUrlImagenManual(url)
+  }
+
+  const imagenActualModal = archivoImagen
+    ? { tipo: 'archivo', preview: previewImagen }
+    : urlImagenManual
+      ? { tipo: 'url', url: urlImagenManual }
+      : selectedProducto?.imagen && modalMode === 'editar'
+        ? { tipo: 'existente-url', url: selectedProducto.imagen }
+        : null
+
   // Abrir modal para crear
   const openCreateModal = () => {
-    setFormData({ nombre: '', descripcion: '', precio: '', imagen: '' })
+    solicitudSucursalesRef.current += 1
+    quitarImagenSeleccionada()
+    setFormData({ nombre: '', descripcion: '', precio: '' })
     setSelectedSucursales([])
+    setLoadingSucursalesProducto(false)
+    setErrorSucursalesProducto('')
     setCategoriaId('')
+    setSelectedProducto(null)
     setModalMode('crear')
     setErrorMessage('')
     setShowModal(true)
+    loadConfigImagen()
   }
 
   // Marcar / desmarcar una sucursal del checklist
   const toggleSucursal = (sucursalId) => {
+    const id = String(sucursalId)
     setSelectedSucursales(prev =>
-      prev.includes(sucursalId)
-        ? prev.filter(id => id !== sucursalId)
-        : [...prev, sucursalId]
+      prev.includes(id)
+        ? prev.filter(selectedId => selectedId !== id)
+        : [...prev, id]
     )
   }
 
   // Marcar / desmarcar todas
   const toggleTodasSucursales = () => {
-    setSelectedSucursales(prev =>
-      prev.length === sucursales.length ? [] : sucursales.map(s => s.id)
-    )
+    setSelectedSucursales(prev => (
+      prev.length === sucursales.length ? [] : sucursales.map(s => String(s.id))
+    ))
   }
 
   // Abrir modal para editar
   const openEditModal = (producto) => {
+    solicitudSucursalesRef.current += 1
+    // Sin archivo nuevo y sin URL manual: la imagen actual del producto
+    // se conserva porque no se envía el campo imagen.
+    quitarImagenSeleccionada()
     setSelectedProducto(producto)
     setFormData({
       nombre: producto.nombre,
       descripcion: producto.descripcion || '',
-      precio: producto.precio,
-      imagen: producto.imagen || ''
+      precio: producto.precio
     })
     setCategoriaId(producto.categoriaId || '')
     setModalMode('editar')
     setErrorMessage('')
+    setSelectedSucursales([])
+    setLoadingSucursalesProducto(true)
+    setErrorSucursalesProducto('')
     setShowModal(true)
+    loadConfigImagen()
     // Checklist refleja las relaciones reales de producto_sucursal
     cargarSucursalesDeProducto(producto.id)
   }
 
   // Cerrar modal
-  const closeModal = () => {
+  const closeModal = (forzar = false) => {
+    if (saving && !forzar) return
+    solicitudSucursalesRef.current += 1
+    quitarImagenSeleccionada()
     setShowModal(false)
-    setFormData({ nombre: '', descripcion: '', precio: '', imagen: '' })
+    setFormData({ nombre: '', descripcion: '', precio: '' })
     setSelectedProducto(null)
     setSelectedSucursales([])
+    setLoadingSucursalesProducto(false)
+    setErrorSucursalesProducto('')
     setCategoriaId('')
     setErrorMessage('')
     setSaving(false)
@@ -290,7 +420,8 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   }
 
   // Cerrar modal de confirmación
-  const closeDeleteModal = () => {
+  const closeDeleteModal = (forzar = false) => {
+    if (deleting && !forzar) return
     setShowDeleteModal(false)
     setProductoAEliminar(null)
   }
@@ -303,12 +434,12 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
     try {
       await api.delete(`/productos/${productoAEliminar.id}`)
       setSuccessMessage(MENSAJES.PRODUCTO_ELIMINADO)
-      closeDeleteModal()
+      closeDeleteModal(true)
       await loadProductos()
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (err) {
       // El producto permanece en la lista
-      closeDeleteModal()
+      closeDeleteModal(true)
       setErrorMessage(obtenerMensajeError(err, 'No fue posible eliminar el producto.'))
       setTimeout(() => setErrorMessage(''), 5000)
     } finally {
@@ -319,6 +450,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   // Manejar envío del formulario
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return
     setErrorMessage('')
 
     // Validaciones
@@ -343,37 +475,92 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
       return
     }
 
+    if (loadingSucursalesProducto) {
+      setErrorMessage('Espera a que termine la carga de las sucursales.')
+      return
+    }
+
+    if (errorSucursalesProducto) {
+      setErrorMessage('No se pudieron cargar las sucursales. Intenta cargarlas nuevamente antes de guardar.')
+      return
+    }
+
     // Al crear, debe seleccionarse al menos una sucursal
     if (selectedSucursales.length === 0) {
       setErrorMessage('Debe seleccionar al menos una sucursal donde se ofrece el producto')
       return
     }
 
-    const params = new URLSearchParams()
-    params.append('nombre', formData.nombre.trim())
-    params.append('descripcion', formData.descripcion || '')
-    params.append('precio', formData.precio)
-    params.append('imagen', formData.imagen || '')
-
-    if (categoriaId) {
-      params.append('categoriaId', categoriaId)
-    }
-
-    // Una entrada sucursalIds por cada sucursal seleccionada
-    selectedSucursales.forEach(id => params.append('sucursalIds', id))
-
     setSaving(true)
 
     try {
-      if (modalMode === 'crear') {
+      if (archivoImagen) {
+        // Multipart: el backend recibe el archivo y lo sube a Cloudinary
+        const fd = new FormData()
+        fd.append('nombre', formData.nombre.trim())
+        fd.append('descripcion', formData.descripcion || '')
+        fd.append('precio', formData.precio)
+        if (categoriaId) fd.append('categoriaId', categoriaId)
+        selectedSucursales.forEach(id => fd.append('sucursalIds', id))
+        fd.append('imagen', archivoImagen)
+
+        if (modalMode === 'crear') {
+          await api.post('/productos/create', fd)
+          setSuccessMessage(MENSAJES.PRODUCTO_CREADO)
+        } else {
+          await api.put(`/productos/${selectedProducto.id}`, fd)
+          setSuccessMessage(MENSAJES.PRODUCTO_ACTUALIZADO)
+        }
+      } else if (urlImagenManual) {
+        // URL externa explícita: el backend la registra como imagen
+        const params = new URLSearchParams()
+        params.append('nombre', formData.nombre.trim())
+        params.append('descripcion', formData.descripcion || '')
+        params.append('precio', formData.precio)
+        if (categoriaId) {
+          params.append('categoriaId', categoriaId)
+        }
+        selectedSucursales.forEach(id => params.append('sucursalIds', id))
+        params.append('imagen', urlImagenManual)
+
+        if (modalMode === 'crear') {
+          await api.post('/productos/create', params)
+          setSuccessMessage(MENSAJES.PRODUCTO_CREADO)
+        } else {
+          await api.put(`/productos/${selectedProducto.id}`, params)
+          setSuccessMessage(MENSAJES.PRODUCTO_ACTUALIZADO)
+        }
+      } else if (modalMode === 'crear') {
+        // Crear sin imagen
+        const params = new URLSearchParams()
+        params.append('nombre', formData.nombre.trim())
+        params.append('descripcion', formData.descripcion || '')
+        params.append('precio', formData.precio)
+        if (categoriaId) {
+          params.append('categoriaId', categoriaId)
+        }
+        selectedSucursales.forEach(id => params.append('sucursalIds', id))
+
         await api.post('/productos/create', params)
         setSuccessMessage(MENSAJES.PRODUCTO_CREADO)
       } else {
+        // EDITAR sin nueva imagen: NO se envía el campo imagen para
+        // conservar la imagen actual del producto (incluido su publicId).
+        const params = new URLSearchParams()
+        params.append('nombre', formData.nombre.trim())
+        params.append('descripcion', formData.descripcion || '')
+        params.append('precio', formData.precio)
+        if (categoriaId) {
+          params.append('categoriaId', categoriaId)
+        }
+        selectedSucursales.forEach(id => params.append('sucursalIds', id))
+
         await api.put(`/productos/${selectedProducto.id}`, params)
         setSuccessMessage(MENSAJES.PRODUCTO_ACTUALIZADO)
       }
 
-      closeModal()
+      setSaving(false)
+      closeModal(true)
       await loadProductos()
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (err) {
@@ -383,7 +570,11 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   }
 
   if (loading) {
-    return <div className="text-center mt-5"><div className="spinner-border"></div></div>
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: colores.fondo }}>
+        <div className="spinner-border" style={{ color: colores.primario }}></div>
+      </div>
+    )
   }
 
   if (!currentUser) return null
@@ -391,31 +582,36 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   const esAdmin = !esSuperadmin()
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
       {/* Sidebar compartido */}
       <Sidebar currentUser={currentUser} rutaActual="/productos" onLogout={handleLogout} />
 
       {/* Main Content */}
-      <div style={{ marginLeft: '260px', flex: 1, padding: '30px' }}>
+      <div style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-          <h2>Producto</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
+          <div>
+            <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Productos</h2>
+            <small style={{ color: colores.textoSuave }}>
+              Catálogo global del restaurante y disponibilidad por sucursal
+            </small>
+          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             {/* RF012: solo SUPERADMIN crea productos del catálogo global */}
             {esSuperadmin() && (
-              <button className="btn" style={{ backgroundColor: '#1a3c34', color: 'white' }} onClick={openCreateModal}>
+              <button className="btn d-flex align-items-center" style={{ ...btnPrimario, minHeight: '44px' }} onClick={openCreateModal}>
                 <FiPlus style={{ marginRight: '5px' }} /> Agregar Producto
               </button>
             )}
             {esAdmin && miSucursal && (
-              <span className="badge bg-success-subtle text-success border border-success-subtle">
+              <span style={estiloBadge(colores.exitoFondo, colores.exitoTexto)}>
                 Sucursal: {miSucursal.nombre}
               </span>
             )}
             <span className="text-muted">Hola, <strong>{currentUser.nombre}</strong></span>
             <img
-              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=1a3c34&color=fff`}
+              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=11362E&color=fff`}
               className="rounded-circle"
               width="40"
               height="40"
@@ -426,24 +622,39 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
 
         {/* Mensaje de éxito */}
         {successMessage && (
-          <div className="alert alert-success d-flex align-items-center" role="alert">
-            <i className="fa-solid fa-circle-check me-2"></i>
+          <div style={{
+            ...tarjeta,
+            backgroundColor: colores.exitoFondo, border: `1px solid ${colores.exitoFondo}`,
+            color: colores.exitoTexto,
+            padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '16px'
+          }}>
+            <FiCheckCircle size={18} style={{ color: colores.exito }} />
             <div>{successMessage}</div>
           </div>
         )}
 
         {/* Mensaje de error */}
         {errorMessage && (
-          <div className="alert alert-danger d-flex align-items-center" role="alert">
-            <i className="fa-solid fa-circle-exclamation me-2"></i>
+          <div style={{
+            ...tarjeta,
+            backgroundColor: colores.errorFondo, border: `1px solid ${colores.errorFondo}`,
+            color: colores.errorTexto,
+            padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '16px'
+          }}>
+            <FiXCircle size={18} style={{ color: colores.error }} />
             <div>{errorMessage}</div>
           </div>
         )}
 
         {/* ADMINISTRADOR sin sucursal asignada */}
         {esAdmin && !miSucursal && (
-          <div className="alert alert-warning d-flex align-items-center" role="alert">
-            <i className="fa-solid fa-triangle-exclamation me-2"></i>
+          <div style={{
+            ...tarjeta,
+            backgroundColor: colores.advertenciaFondo, border: `1px solid ${colores.advertenciaFondo}`,
+            color: colores.advertenciaTexto,
+            padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '16px'
+          }}>
+            <FiAlertTriangle size={18} style={{ color: colores.advertencia }} />
             <div>
               El administrador no tiene una sucursal asignada. Contacte al superadmin.
             </div>
@@ -451,9 +662,9 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
         )}
 
         {/* Tabla de Productos */}
-        <div className="card p-4" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-          <table className="table table-hover align-middle">
-            <thead className="text-muted">
+        <div style={{ ...tarjeta, padding: '20px', overflowX: 'auto' }}>
+          <table className="table table-hover align-middle mb-0" style={{ minWidth: '640px' }}>
+            <thead style={{ color: colores.textoSuave }}>
               <tr>
                 <th>Imagen</th>
                 <th>Producto</th>
@@ -467,8 +678,8 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
             <tbody>
               {productos.length === 0 ? (
                 <tr>
-                  <td colSpan={esSuperadmin() ? 6 : 5} className="text-center text-muted py-4">
-                    <i className="fa-solid fa-utensils fa-2x mb-2 d-block" style={{ color: '#ccc' }}></i>
+                  <td colSpan={esSuperadmin() ? 6 : 5} style={{ textAlign: 'center', color: colores.textoSuave, padding: '40px 8px' }}>
+                    <i className="fa-solid fa-utensils fa-2x mb-2 d-block" style={{ color: colores.textoSuaveClaro }}></i>
                     No hay productos registrados
                   </td>
                 </tr>
@@ -477,28 +688,37 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                   <tr key={producto.id}>
                     <td>
                       {producto.imagen ? (
-                        <img src={producto.imagen} alt={producto.nombre} style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }} />
+                        <img src={producto.imagen} alt={producto.nombre} style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: radios.sm, border: `1px solid ${colores.borde}` }} />
                       ) : (
-                        <div style={{ width: '50px', height: '50px', backgroundColor: '#f0f0f0', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <i className="fa-solid fa-utensils text-muted"></i>
+                        <div style={{ width: '50px', height: '50px', backgroundColor: colores.superficie, borderRadius: radios.sm, border: `1px solid ${colores.borde}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <i className="fa-solid fa-utensils" style={{ color: colores.textoSuaveClaro }}></i>
                         </div>
                       )}
                     </td>
-                    <td><strong>{producto.nombre}</strong></td>
-                    <td className="text-muted" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {producto.descripcion || '-'}
+                    <td><strong style={{ color: colores.texto }}>{producto.nombre}</strong></td>
+                    <td style={{ color: colores.textoSuave, maxWidth: '260px', fontSize: '13px', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                      <span style={{
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 3,
+                        overflow: 'hidden'
+                      }}>
+                        {producto.descripcion?.trim() || '-'}
+                      </span>
                     </td>
-                    <td>${parseFloat(producto.precio).toLocaleString('es-CO')}</td>
+                    <td className="tnum" style={{ color: colores.texto, fontWeight: 600, ...cifrasTabulares }}>
+                      ${parseFloat(producto.precio).toLocaleString('es-CO')}
+                    </td>
                     <td>
                       {esSuperadmin() ? (
                         /* SUPERADMIN: la disponibilidad es por sucursal, se gestiona al editar */
-                        <span className="badge bg-secondary-subtle text-secondary border">
+                        <span style={estiloBadge(colores.superficie, colores.textoSuave)}>
                           {producto.disponible ? 'Catálogo activo' : 'Catálogo inactivo'}
                         </span>
                       ) : producto.disponibleEnMiSucursal === null ? (
                         /* ADMIN: producto no asociado a su sucursal */
                         <span
-                          className="badge bg-warning-subtle text-warning border border-warning-subtle"
+                          style={estiloBadge(colores.advertenciaFondo, colores.advertenciaTexto)}
                           title="El producto no está asociado a su sucursal"
                         >
                           No asociado
@@ -506,7 +726,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                       ) : (
                         <select
                           className="form-select form-select-sm"
-                          style={{ width: 'auto' }}
+                          style={{ width: 'auto', borderColor: colores.borde, color: colores.texto }}
                           value={producto.disponibleEnMiSucursal ? 'disponible' : 'no-disponible'}
                           disabled={updatingId === producto.id}
                           onChange={(e) => handleCambiarDisponibilidad(
@@ -523,10 +743,12 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                     {esSuperadmin() && (
                       <td>
                         <div className="d-flex gap-1 flex-wrap">
-                          <button className="btn btn-sm btn-outline-primary" title="Editar producto" onClick={() => openEditModal(producto)}>
+                          <button className="btn btn-sm" title="Editar producto" onClick={() => openEditModal(producto)}
+                            style={{ ...btnGhost, minHeight: '36px', padding: '0 10px' }}>
                             <FiEdit2 />
                           </button>
-                          <button className="btn btn-sm btn-outline-danger" title="Eliminar producto" onClick={() => openDeleteModal(producto)}>
+                          <button className="btn btn-sm" title="Eliminar producto" onClick={() => openDeleteModal(producto)}
+                            style={{ ...btnGhost, minHeight: '36px', padding: '0 10px', color: colores.error }}>
                             <FiTrash2 />
                           </button>
                         </div>
@@ -544,82 +766,159 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
       {showModal && (
         <>
           {/* Backdrop / Overlay */}
-          <div 
-            onClick={closeModal}
+          <div
+            onClick={() => closeModal()}
             style={{
               position: 'fixed',
               top: 0,
               left: 0,
               width: '100%',
               height: '100%',
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              zIndex: 1040
+              backgroundColor: sombras.backdrop,
+              backdropFilter: 'blur(4px)',
+              zIndex: 1040,
+              cursor: saving ? 'wait' : 'default'
             }}
           />
           {/* Modal */}
-          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
-            <div className="modal-dialog modal-md">
-              <div className="modal-content">
-                <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
-                  <h5 className="modal-title">
-                    {modalMode === 'crear' ? (
-                      <><FiPlus style={{ marginRight: '8px' }} /> Agregar Producto</>
-                    ) : (
-                      <><FiEdit2 style={{ marginRight: '8px' }} /> Modificar Producto</>
-                    )}
-                  </h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={closeModal}></button>
+          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1" role="dialog" aria-modal="true">
+            <div className="modal-dialog modal-dialog-centered modal-md" style={{ maxWidth: '600px' }}>
+              <div style={{ ...tarjeta, boxShadow: sombras.nivel3, overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto' }}>
+                {/* Encabezado */}
+                <div style={{ padding: '20px 24px 0 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '38px', height: '38px', borderRadius: radios.md,
+                      backgroundColor: colores.primario, color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                    }}>
+                      {modalMode === 'crear' ? <FiPlus size={18} /> : <FiEdit2 size={18} />}
+                    </div>
+                    <div>
+                      <h5 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>
+                        {modalMode === 'crear' ? 'Agregar Producto' : 'Modificar Producto'}
+                      </h5>
+                      <small style={{ color: colores.textoSuave }}>
+                        Datos visibles para comensal y meseros
+                      </small>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => closeModal()} disabled={saving} style={{
+                    border: 'none', background: 'transparent', color: colores.textoSuave,
+                    cursor: 'pointer', fontSize: '18px', padding: '4px'
+                  }} aria-label="Cerrar">
+                    <FiX />
+                  </button>
                 </div>
+
                 <form onSubmit={handleSubmit}>
-                  <div className="modal-body">
+                  <div style={{ padding: '20px 24px' }}>
                     {errorMessage && (
-                      <div className="alert alert-danger d-flex align-items-center" role="alert">
-                        <i className="fa-solid fa-circle-exclamation me-2"></i>
-                        <div>{errorMessage}</div>
+                      <div style={{
+                        backgroundColor: colores.errorFondo, color: colores.errorTexto,
+                        borderRadius: radios.sm, padding: '10px 12px', fontSize: '13px', marginBottom: '14px'
+                      }}>
+                        {errorMessage}
                       </div>
                     )}
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">Nombre del producto</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Ej: Hamburguesa Clásica"
-                        required
-                        value={formData.nombre}
-                        onChange={(e) => setFormData({...formData, nombre: e.target.value})}
-                      />
+
+                    {/* Fila: foto + nombre */}
+                    <div className="row g-3 mb-3">
+                      {/* Miniatura / zona de subida */}
+                      <div className="col-12 col-md-4">
+                        <label className="form-label small fw-semibold">Foto</label>
+                        <button
+                          type="button"
+                          onClick={abrirCargadorImagen}
+                          style={{
+                            width: '100%',
+                            aspectRatio: '1 / 1',
+                            borderRadius: radios.md,
+                            border: `2px dashed ${colores.borde}`,
+                            backgroundColor: colores.superficie,
+                            display: 'flex', flexDirection: 'column',
+                            alignItems: 'center', justifyContent: 'center',
+                            gap: '6px', cursor: 'pointer',
+                            overflow: 'hidden',
+                            position: 'relative'
+                          }}
+                          aria-label="Seleccionar imagen del producto"
+                        >
+                          {imagenActualModal ? (
+                            <>
+                              <img
+                                src={imagenActualModal.tipo === 'url' ? imagenActualModal.url : imagenActualModal.preview || imagenActualModal.url}
+                                alt="Imagen del producto"
+                                style={{
+                                  position: 'absolute', inset: 0,
+                                  width: '100%', height: '100%', objectFit: 'cover'
+                                }}
+                              />
+                              <span style={{
+                                position: 'absolute', bottom: '6px', right: '6px',
+                                backgroundColor: 'rgba(17,54,46,0.85)', color: '#fff',
+                                borderRadius: radios.sm, padding: '4px 8px',
+                                fontSize: '11px', fontWeight: 600,
+                                display: 'inline-flex', alignItems: 'center', gap: '4px'
+                              }}>
+                                <FiUploadCloud size={12} /> Cambiar
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <div style={{
+                                width: '40px', height: '40px', borderRadius: '50%',
+                                backgroundColor: colores.mint, color: colores.primario,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                              }}>
+                                <FiCamera size={18} />
+                              </div>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: colores.primario }}>+ Foto</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="col-12 col-md-8">
+                        <div>
+                          <label className="form-label small fw-semibold">Nombre del producto</label>
+                          <input
+                            type="text"
+                            placeholder="Ej: Hamburguesa Clásica"
+                            required
+                            value={formData.nombre}
+                            onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+                            style={{ ...input, width: '100%' }}
+                          />
+                        </div>
+                        <div className="mt-3">
+                          <label className="form-label small fw-semibold">
+                            Precio
+                            <span className="ms-1" style={{ color: colores.textoSuave, fontWeight: 400 }}>(COP)</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Ej: 28900"
+                            required
+                            value={formData.precio}
+                            onChange={(e) => setFormData({...formData, precio: e.target.value})}
+                            style={{ ...input, width: '100%' }}
+                          />
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Descripción */}
                     <div className="mb-3">
                       <label className="form-label small fw-semibold">Descripción</label>
                       <textarea
-                        className="form-control"
-                        rows="3"
+                        rows="2"
                         placeholder="Descripción del producto"
                         value={formData.descripcion}
                         onChange={(e) => setFormData({...formData, descripcion: e.target.value})}
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">Precio</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="form-control"
-                        placeholder="Ej: 28900"
-                        required
-                        value={formData.precio}
-                        onChange={(e) => setFormData({...formData, precio: e.target.value})}
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">URL de la imagen</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="https://ejemplo.com/imagen.jpg"
-                        value={formData.imagen}
-                        onChange={(e) => setFormData({...formData, imagen: e.target.value})}
+                        style={{ ...input, width: '100%', height: 'auto', minHeight: '72px', padding: '10px 12px' }}
                       />
                     </div>
 
@@ -627,7 +926,6 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                     <div className="mb-3">
                       <label className="form-label small fw-semibold">Categoría</label>
                       <select
-                        className="form-select"
                         value={categoriaId}
                         onChange={(e) => {
                           if (e.target.value === CREAR_CATEGORIA) {
@@ -637,6 +935,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                             setCategoriaId(e.target.value)
                           }
                         }}
+                        style={{ ...input, width: '100%' }}
                       >
                         <option value="">Sin categoría</option>
                         {categorias.map(c => (
@@ -650,71 +949,113 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                     </div>
 
                     {/* Checklist de sucursales (crear y editar) */}
-                    {(modalMode === 'crear' || modalMode === 'editar') && (
-                      <div className="mb-3">
-                        <div className="d-flex justify-content-between align-items-center mb-2">
-                          <label className="form-label small fw-semibold mb-0">
-                            Sucursales donde se ofrece
-                          </label>
-                          <button
-                            type="button"
-                            className="btn btn-link btn-sm p-0"
-                            style={{ color: '#1a3c34', fontSize: '0.78rem' }}
-                            onClick={toggleTodasSucursales}
-                          >
-                            {selectedSucursales.length === sucursales.length
-                              ? 'Desmarcar todas'
-                              : 'Seleccionar todas'}
-                          </button>
-                        </div>
+                    <div className="mb-2">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <label className="form-label small fw-semibold mb-0">
+                          Sucursales donde se ofrece
+                        </label>
+                        <button
+                          type="button"
+                          className="btn btn-link btn-sm p-0"
+                          style={{ color: colores.secundario, fontSize: '0.78rem', fontWeight: 600 }}
+                          onClick={toggleTodasSucursales}
+                          disabled={loadingSucursalesProducto || Boolean(errorSucursalesProducto)}
+                        >
+                          {selectedSucursales.length === sucursales.length
+                            ? 'Desmarcar todas'
+                            : 'Seleccionar todas'}
+                        </button>
+                      </div>
 
-                        {sucursales.length === 0 ? (
-                          <div className="alert alert-warning py-2 small mb-0">
-                            No hay sucursales registradas para este restaurante.
-                          </div>
-                        ) : (
+                      {sucursales.length === 0 ? (
+                        <div style={{
+                          backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
+                          borderRadius: radios.sm, padding: '10px 12px', fontSize: '13px'
+                        }}>
+                          No hay sucursales registradas para este restaurante.
+                        </div>
+                      ) : (
+                        <>
+                          {loadingSucursalesProducto && (
+                            <small role="status" style={{ color: colores.textoSuave, display: 'block', marginBottom: '8px' }}>
+                              Cargando sucursales asociadas...
+                            </small>
+                          )}
+                          {errorSucursalesProducto && (
+                            <div role="alert" style={{
+                              backgroundColor: colores.errorFondo, color: colores.errorTexto,
+                              borderRadius: radios.sm, padding: '10px 12px', fontSize: '13px', marginBottom: '8px'
+                            }}>
+                              {errorSucursalesProducto}{' '}
+                              <button
+                                type="button"
+                                className="btn btn-link btn-sm p-0"
+                                onClick={() => cargarSucursalesDeProducto(selectedProducto.id)}
+                              >
+                                Reintentar
+                              </button>
+                            </div>
+                          )}
                           <div
-                            className="border rounded p-2"
+                            className="row g-2"
                             style={{ maxHeight: '160px', overflowY: 'auto' }}
                           >
-                            {sucursales.map(s => (
-                              <div className="form-check" key={s.id}>
-                                <input
-                                  className="form-check-input"
-                                  type="checkbox"
-                                  id={`suc-${s.id}`}
-                                  checked={selectedSucursales.includes(s.id)}
-                                  onChange={() => toggleSucursal(s.id)}
-                                />
-                                <label
-                                  className="form-check-label small"
-                                  htmlFor={`suc-${s.id}`}
-                                  style={!s.activa ? { color: '#999' } : {}}
-                                >
-                                  {s.nombre}
-                                  {!s.activa && ' (inactiva)'}
-                                </label>
-                              </div>
-                            ))}
+                            {sucursales.map(s => {
+                              const checked = selectedSucursales.includes(String(s.id))
+                              return (
+                                <div className="col-12 col-md-6" key={s.id}>
+                                  <label style={{
+                                    display: 'flex', alignItems: 'center', gap: '10px',
+                                    padding: '10px 12px',
+                                    borderRadius: radios.sm,
+                                    border: checked ? `1px solid ${colores.primario}` : `1px solid ${colores.borde}`,
+                                    backgroundColor: checked ? colores.mint : colores.tarjeta,
+                                    cursor: 'pointer', fontSize: '13px', color: colores.texto,
+                                    fontWeight: 500
+                                  }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      disabled={loadingSucursalesProducto || Boolean(errorSucursalesProducto)}
+                                      onChange={() => toggleSucursal(s.id)}
+                                      style={{ accentColor: colores.primario }}
+                                    />
+                                    {s.nombre}
+                                    {!s.activa && <small style={{ color: colores.textoSuave }}>(inactiva)</small>}
+                                  </label>
+                                </div>
+                              )
+                            })}
                           </div>
-                        )}
+                        </>
+                      )}
 
-                        <small className="text-muted">
-                          El producto se crea una sola vez en el catálogo y se ofrece en las
-                          sucursales seleccionadas.
-                        </small>
-                      </div>
-                    )}
+                      <small style={{ color: colores.textoSuave, display: 'block', marginTop: '8px' }}>
+                        El producto se crea una sola vez en el catálogo y se ofrece en las
+                        sucursales seleccionadas.
+                      </small>
+                    </div>
                   </div>
-                  <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeModal}>
+
+                  {/* Pie del modal */}
+                  <div style={{
+                    borderTop: `1px solid ${colores.borde}`,
+                    backgroundColor: colores.superficie,
+                    padding: '14px 24px',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '10px',
+                    position: 'sticky',
+                    bottom: 0
+                  }}>
+                    <button type="button" className="btn" onClick={() => closeModal()} disabled={saving} style={{ ...btnGhost, minHeight: '44px', padding: '0 16px' }}>
                       <FiX style={{ marginRight: '5px' }} /> Cancelar
                     </button>
                     <button
                       type="submit"
-                      className="btn btn-sm"
-                      style={{ backgroundColor: '#1a3c34', color: 'white' }}
-                      disabled={saving}
+                      className="btn"
+                      style={{ ...btnPrimario, minHeight: '44px', padding: '0 18px' }}
+                      disabled={saving || loadingSucursalesProducto || Boolean(errorSucursalesProducto)}
                     >
                       {saving ? (
                         <>
@@ -725,7 +1066,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                           Guardando...
                         </>
                       ) : modalMode === 'crear' ? (
-                        <><FiPlus style={{ marginRight: '5px' }} /> Crear</>
+                        <><FiPlus style={{ marginRight: '5px' }} /> Crear producto</>
                       ) : (
                         <><FiEdit2 style={{ marginRight: '5px' }} /> Guardar cambios</>
                       )}
@@ -738,6 +1079,18 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
         </>
       )}
 
+      {/* Cargador de imagen (arrastra y suelta) */}
+      <CargadorImagen
+        visible={showUploadModal}
+        onCerrar={() => setShowUploadModal(false)}
+        archivoSeleccionado={archivoImagen}
+        previewUrl={previewImagen}
+        urlManual={urlImagenManual}
+        onArchivo={asignarArchivo}
+        onUrl={asignarUrlManual}
+        maxBytes={configImagen.maxBytes}
+      />
+
       {/* Modal Crear Categoría */}
       {showCategoryModal && (
         <>
@@ -746,43 +1099,49 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
             onClick={closeCreateCategoryModal}
             style={{
               position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-              backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: 1060
+              backgroundColor: sombras.backdrop, backdropFilter: 'blur(4px)', zIndex: 1060
             }}
           />
           {/* Modal */}
           <div className="modal show" style={{ display: 'block', zIndex: 1070 }} tabIndex="-1">
-            <div className="modal-dialog modal-sm">
-              <div className="modal-content">
-                <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
-                  <h5 className="modal-title">Crear categoría</h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={closeCreateCategoryModal}></button>
+            <div className="modal-dialog modal-dialog-centered modal-sm" style={{ maxWidth: '420px' }}>
+              <div style={{ ...tarjeta, boxShadow: sombras.nivel3, overflow: 'hidden' }}>
+                <div style={{ padding: '20px 24px 0 24px' }}>
+                  <h5 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Crear categoría</h5>
                 </div>
                 <form onSubmit={handleCreateCategory}>
-                  <div className="modal-body">
+                  <div style={{ padding: '16px 24px' }}>
                     {categoryError && (
-                      <div className="alert alert-danger d-flex align-items-center py-2" role="alert">
-                        <i className="fa-solid fa-circle-exclamation me-2"></i>
-                        <div className="small">{categoryError}</div>
+                      <div style={{
+                        backgroundColor: colores.errorFondo, color: colores.errorTexto,
+                        borderRadius: radios.sm, padding: '10px 12px', fontSize: '13px', marginBottom: '12px'
+                      }}>
+                        {categoryError}
                       </div>
                     )}
                     <label className="form-label small fw-semibold">Nombre</label>
                     <input
                       type="text"
-                      className="form-control"
                       placeholder="Ej: Bebidas"
                       required
                       value={newCategoryName}
                       onChange={(e) => setNewCategoryName(e.target.value)}
+                      style={{ ...input, width: '100%' }}
                     />
-                    <small className="text-muted">
+                    <small style={{ color: colores.textoSuave, display: 'block', marginTop: '6px' }}>
                       La categoría quedará asociada a su restaurante.
                     </small>
                   </div>
-                  <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateCategoryModal}>
+                  <div style={{
+                    borderTop: `1px solid ${colores.borde}`,
+                    backgroundColor: colores.superficie,
+                    padding: '14px 24px',
+                    display: 'flex', justifyContent: 'flex-end', gap: '10px'
+                  }}>
+                    <button type="button" className="btn" onClick={closeCreateCategoryModal} style={{ ...btnGhost, minHeight: '44px', padding: '0 16px' }}>
                       <FiX style={{ marginRight: '5px' }} /> Cancelar
                     </button>
-                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: '#1a3c34', color: 'white' }} disabled={creatingCategory}>
+                    <button type="submit" className="btn" style={{ ...btnPrimario, minHeight: '44px', padding: '0 16px' }} disabled={creatingCategory}>
                       {creatingCategory ? 'Creando...' : 'Crear categoría'}
                     </button>
                   </div>
@@ -797,39 +1156,52 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
       {showDeleteModal && (
         <>
           {/* Backdrop / Overlay */}
-          <div 
-            onClick={closeDeleteModal}
+          <div
+            onClick={() => closeDeleteModal()}
             style={{
               position: 'fixed',
               top: 0,
               left: 0,
               width: '100%',
               height: '100%',
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              backgroundColor: sombras.backdrop,
+              backdropFilter: 'blur(4px)',
               zIndex: 1040
             }}
           />
           {/* Modal */}
           <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
-            <div className="modal-dialog modal-sm">
-              <div className="modal-content">
-                <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
-                  <h5 className="modal-title">
-                    <FiTrash2 style={{ marginRight: '8px' }} /> Eliminar Producto
-                  </h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={closeDeleteModal}></button>
+            <div className="modal-dialog modal-dialog-centered modal-sm" style={{ maxWidth: '440px' }}>
+              <div style={{ ...tarjeta, boxShadow: sombras.nivel3, overflow: 'hidden' }}>
+                <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '38px', height: '38px', borderRadius: radios.md,
+                    backgroundColor: colores.errorFondo, color: colores.error,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                  }}>
+                    <FiTrash2 size={18} />
+                  </div>
+                  <h5 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Eliminar Producto</h5>
                 </div>
-                <div className="modal-body">
+                <div style={{ padding: '0 24px 20px 24px' }}>
                   <p>¿Estás seguro de que deseas eliminar este producto?</p>
-                  <p className="text-muted mb-0">
-                    <strong>{productoAEliminar?.nombre}</strong>
+                  <p style={{ marginBottom: 0, color: colores.texto, fontWeight: 600 }}>
+                    {productoAEliminar?.nombre}
                   </p>
                 </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={closeDeleteModal}>
+                <div style={{
+                  borderTop: `1px solid ${colores.borde}`,
+                  backgroundColor: colores.superficie,
+                  padding: '14px 24px',
+                  display: 'flex', justifyContent: 'flex-end', gap: '10px'
+                }}>
+                  <button type="button" className="btn" onClick={() => closeDeleteModal()} disabled={deleting} style={{ ...btnGhost, minHeight: '44px', padding: '0 16px' }}>
                     <FiX style={{ marginRight: '5px' }} /> Cancelar
                   </button>
-                  <button type="button" className="btn btn-sm btn-danger" onClick={confirmDelete} disabled={deleting}>
+                  <button type="button" className="btn" onClick={confirmDelete} disabled={deleting} style={{
+                    backgroundColor: colores.error, borderColor: colores.error,
+                    color: 'white', fontWeight: 600, borderRadius: radios.sm, minHeight: '44px', padding: '0 16px'
+                  }}>
                     {deleting ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-1" style={{ width: '0.8rem', height: '0.8rem' }}></span>

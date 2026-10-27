@@ -4,6 +4,7 @@ import { obtenerSugerencias } from '../services/pedidos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import ModalPersonalizacion from './ModalPersonalizacion.jsx'
 import { formatearDinero } from '../utils/dinero.js'
+import { colores, tarjeta, radios, estiloBadge } from '../styles/tokens.js'
 
 /**
  * RF034 — Sugerencias de productos.
@@ -65,7 +66,7 @@ function Sugerencias({ productoActual, onAgregar, excluir = [] }) {
   if (loading) {
     return (
       <div className="text-center py-3">
-        <div className="spinner-border spinner-border-sm" style={{ color: '#1a3c34' }}></div>
+        <div className="spinner-border spinner-border-sm" style={{ color: colores.primario }}></div>
         <small className="text-muted d-block mt-1">Cargando sugerencias...</small>
       </div>
     )
@@ -91,13 +92,13 @@ function Sugerencias({ productoActual, onAgregar, excluir = [] }) {
 
   return (
     <div className="mt-4">
-      <h5 className="mb-3" style={{ color: '#1a3c34' }}>
+      <h5 className="mb-3" style={{ color: colores.primario }}>
         <i className="fa-solid fa-lightbulb me-2"></i>También te puede gustar
       </h5>
       <div className="row g-2">
         {sugerencias.map(producto => (
           <div key={producto.id} className="col-6 col-md-4">
-            <div className="card h-100" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+            <div className="card h-100" style={{ border: tarjeta.border, borderRadius: radios.lg, backgroundColor: tarjeta.background, boxShadow: tarjeta.boxShadow }}>
               {producto.imagen ? (
                 <img src={producto.imagen} className="card-img-top" alt={producto.nombre}
                   style={{ height: '100px', objectFit: 'cover' }} />
@@ -113,12 +114,12 @@ function Sugerencias({ productoActual, onAgregar, excluir = [] }) {
                   {formatearDinero(producto.precio || 0)}
                 </p>
                 {!producto.disponible && (
-                  <span className="badge bg-danger" style={{ fontSize: '0.65rem' }}>No disponible</span>
+                  <span className="badge" style={{ ...estiloBadge(colores.errorFondo, colores.errorTexto), fontSize: '0.65rem' }}>No disponible</span>
                 )}
                 <button
                   type="button"
                   className="btn btn-sm w-100 mt-2"
-                  style={{ backgroundColor: '#1a3c34', color: 'white' }}
+                  style={{ backgroundColor: colores.primario, color: 'white' }}
                   onClick={() => handleAgregar(producto)}
                   disabled={!producto.disponible}
                 >

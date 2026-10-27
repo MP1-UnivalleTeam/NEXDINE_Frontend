@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
-import { FiShoppingCart } from 'react-icons/fi'
+import { FiShoppingCart, FiPlus, FiClock, FiArrowRight, FiAlertTriangle, FiSearch, FiHeart } from 'react-icons/fi'
 import api from '../services/api.js'
+import { listarFavoritos, agregarFavorito, eliminarFavorito } from '../services/favoritos.js'
 import BuscadorProductos from '../components/BuscadorProductos.jsx'
 import SelectorTipoServicio, { TIPOS_SERVICIO } from '../components/SelectorTipoServicio.jsx'
 import SelectorSucursal from '../components/SelectorSucursal.jsx'
@@ -13,6 +14,7 @@ import {
   guardarSucursalesDisponibles
 } from '../utils/contextoMenu.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
+import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 
 const CLAVE_TOKEN = 'sessionToken'
 const CLAVE_MESA = 'mesaCodigo'
@@ -27,11 +29,15 @@ const CLAVE_TIPO_UI = 'tipoServicioUI'
 const INTERVALO_MENU_MS = 45000
 
 /**
- * Compara el menú recibido con el actual.
- * Si no cambió, devuelve true para NO re-renderizar (evita parpadeos).
+ * Formateador de precios del menú.
+ * El valor SIEMPRE proviene del backend; aquí solo se presenta.
  */
-const menuSinCambios = (actual, nuevo) => {
-  return JSON.stringify(actual ?? null) === JSON.stringify(nuevo ?? null)
+function formatoPrecio(valor) {
+  const numero = Number.isFinite(Number(valor)) ? Number(valor) : 0
+  return `$${new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(numero)}`
 }
 
 function Menu() {
@@ -65,10 +71,18 @@ function Menu() {
 
   // RF031 — Sucursales del restaurante (solo menú público con varias sucursales)
   const [sucursalesDisponibles, setSucursalesDisponibles] = useState([])
+  const [errorSucursalMenu, setErrorSucursalMenu] = useState('')
+
+  // Favoritos del cliente autenticado
+  const [usuario, setUsuario] = useState(null)
+  const [favoritos, setFavoritos] = useState(() => new Set())
+  const [favoritoEnCurso, setFavoritoEnCurso] = useState(() => new Set())
+  const [errorFavorito, setErrorFavorito] = useState('')
+  const esCliente = usuario?.rol === 'CLIENTE'
 
   // Carrito
   const {
-    agregarItem, totalItems, setSucursal, setTasaImpuesto, sucursal
+    agregarItem, totalItems, subtotal, setSucursal, setTasaImpuesto, sucursal
   } = useCarrito()
 
   useEffect(() => {
@@ -79,27 +93,68 @@ function Menu() {
     }
 
     if (!codigoMesa) {
-      setError('No se recibió un código de mesa válido')
+      setError('Escanea el código QR de tu mesa para abrir el menú.')
       setLoading(false)
       return
     }
     cargarMenu()
   }, [codigoMesa, slug])
 
+  useEffect(() => {
+    let cancelado = false
+
+    api.get('/api/auth/me')
+      .then(async (response) => {
+        if (cancelado) return
+        const datos = response.data
+        setUsuario(datos)
+        if (datos?.rol !== 'CLIENTE') return
+
+        try {
+          const lista = await listarFavoritos()
+          if (cancelado) return
+          setFavoritos(new Set((Array.isArray(lista) ? lista : []).map(producto => producto.id)))
+        } catch {
+          if (!cancelado) setErrorFavorito('No fue posible cargar tus favoritos.')
+        }
+      })
+      .catch(() => {})
+
+    return () => { cancelado = true }
+  }, [])
+
   // RF031 / RF052 — Contexto de navegación para "Volver al menú"
   useEffect(() => {
-    const ruta = esMenuPublico
-      ? `/menu/${slug}`
-      : `/menu?mesa=${encodeURIComponent(codigoMesa)}`
-    guardarContextoMenu(ruta)
+    if (esMenuPublico) {
+      guardarContextoMenu(`/menu/${slug}`)
+      return
+    }
+    if (codigoMesa) {
+      guardarContextoMenu(`/menu?mesa=${encodeURIComponent(codigoMesa)}`)
+    }
   }, [esMenuPublico, slug, codigoMesa])
 
   /**
    * Menú público por slug. NO crea sesión, NO usa sessionStorage.
    */
-  const cargarMenuPublico = async () => {
+  const cargarMenuPublico = async (sucursalId = undefined) => {
+    setLoading(true)
     try {
-      const response = await api.get(`/api/menu/${slug}`)
+      let response = await api.get(`/api/menu/${slug}`)
+      const sucursales = response.data.sucursales || []
+      const sucursalActual = sucursalId === undefined ? sucursal?.id : sucursalId
+      const sucursalValida = sucursales.some(
+        item => String(item.id) === String(sucursalActual)
+      )
+
+      if (sucursalActual && sucursalValida) {
+        response = await api.get(`/api/menu/${slug}`, {
+          params: { sucursalId: sucursalActual }
+        })
+      } else if (sucursal?.id && !sucursalValida) {
+        setSucursal(null)
+      }
+
       setCategorias(response.data.menu || [])
       setNombreRestaurante(response.data.restaurante || '')
       aplicarContextoSucursal(response.data)
@@ -130,6 +185,9 @@ function Menu() {
 
   const hayFiltroActivo = Boolean(textoBusqueda.trim() || categoriaFiltro)
   const totalVisibles = contarProductos(menuFiltrado)
+  const requiereSeleccionSucursal = (
+    esMenuPublico && sucursalesDisponibles.length > 1 && !sucursal?.id
+  )
 
   const aplicarBusqueda = ({ texto, categoriaId }) => {
     setTextoBusqueda(texto ?? '')
@@ -181,7 +239,9 @@ function Menu() {
   const actualizarMenuEnSegundoPlano = async () => {
     try {
       if (esMenuPublico) {
-        const response = await api.get(`/api/menu/${slug}`)
+        const response = await api.get(`/api/menu/${slug}`, {
+          params: sucursal?.id ? { sucursalId: sucursal.id } : undefined
+        })
         const nuevos = response.data.menu || []
         setCategorias(prev => (menuSinCambios(prev, nuevos) ? prev : nuevos))
         setNombreRestaurante(prev =>
@@ -220,6 +280,14 @@ function Menu() {
   }
 
   /**
+   * Compara el menú recibido con el actual.
+   * Si no cambió, devuelve true para NO re-renderizar (evita parpadeos).
+   */
+  const menuSinCambios = (actual, nuevo) => {
+    return JSON.stringify(actual ?? null) === JSON.stringify(nuevo ?? null)
+  }
+
+  /**
    * Revalida la sesión contra el backend (autoridad de vigencia).
    * Si el backend responde 401, la sesión expiró: limpia sessionStorage
    * y muestra el popup. No genera una sesión nueva.
@@ -241,13 +309,6 @@ function Menu() {
 
   /**
    * RF031 — Propaga el contexto de sucursal recibido del backend.
-   *
-   * · QR        → la mesa define la sucursal del pedido.
-   * · Público   → usa la sucursal si el restaurante tiene solo una.
-   *
-   * Cuando el restaurante tiene varias sucursales y no hay QR,
-   * `sucursalId` llega null y la selección queda explícita en la
-   * pantalla de pedido (no se inventa una sucursal).
    */
   const aplicarContextoSucursal = (datos) => {
     if (!datos) return
@@ -264,14 +325,12 @@ function Menu() {
   }
 
   // FASE 11 — Un ÚNICO intervalo para actualizar el menú.
-// Funciona tanto para QR como para el menú público por slug.
   useEffect(() => {
     const intervalo = setInterval(actualizarMenuEnSegundoPlano, INTERVALO_MENU_MS)
     return () => clearInterval(intervalo)
-  }, [esMenuPublico, slug])
+  }, [esMenuPublico, slug, sucursal?.id])
 
   // Polling de revalidación de sesión cada 60s; se limpia al desmontar.
-// Solo aplica al flujo QR (menú público no tiene sesión).
   useEffect(() => {
     if (esMenuPublico) return
 
@@ -291,12 +350,17 @@ function Menu() {
     }
     document.addEventListener('visibilitychange', alCambiarVisibilidad)
     return () => document.removeEventListener('visibilitychange', alCambiarVisibilidad)
-  }, [esMenuPublico, slug])
+  }, [esMenuPublico, slug, sucursal?.id])
+
+  const cambiarSucursalPublica = (nuevaSucursal) => {
+    setSucursal(nuevaSucursal)
+    setErrorSucursalMenu('')
+    setError('')
+    cargarMenuPublico(nuevaSucursal?.id ?? null)
+  }
 
   /**
    * Carga el menú validando el QR contra el backend.
-   * El backend es la autoridad: si el código no corresponde a una mesa
-   * activa responde 404 y no se muestra el menú.
    */
   const cargarMenu = async () => {
     try {
@@ -348,6 +412,10 @@ function Menu() {
   // RF020 — El modal solo se usa si el producto tiene grupos de opciones
   // configurados; si no, el producto se agrega directamente al carrito.
   const manejarClickProducto = (item) => {
+    if (requiereSeleccionSucursal) {
+      setErrorSucursalMenu('Selecciona una sucursal para consultar la disponibilidad de sus productos.')
+      return
+    }
     if (!item?.disponible) return
     if (item.tieneOpciones) {
       setProductoParaPersonalizar(item)
@@ -356,20 +424,69 @@ function Menu() {
     agregarItem(item, [], 1)
   }
 
+  const alternarFavorito = async (producto) => {
+    if (!esCliente || !producto?.id || favoritoEnCurso.has(producto.id)) return
+
+    const yaEsFavorito = favoritos.has(producto.id)
+    setFavoritoEnCurso(prev => new Set(prev).add(producto.id))
+    setErrorFavorito('')
+
+    try {
+      if (yaEsFavorito) {
+        await eliminarFavorito(producto.id)
+      } else {
+        await agregarFavorito(producto.id)
+      }
+      setFavoritos(prev => {
+        const siguiente = new Set(prev)
+        if (yaEsFavorito) siguiente.delete(producto.id)
+        else siguiente.add(producto.id)
+        return siguiente
+      })
+    } catch (err) {
+      setErrorFavorito(err.response?.data?.error || 'No fue posible actualizar tus favoritos.')
+    } finally {
+      setFavoritoEnCurso(prev => {
+        const siguiente = new Set(prev)
+        siguiente.delete(producto.id)
+        return siguiente
+      })
+    }
+  }
+
   if (loading) {
-    return <div className="text-center mt-5"><div className="spinner-border"></div></div>
+    return (
+      <div style={{
+        minHeight: '100vh', backgroundColor: colores.fondo,
+        display: 'flex', justifyContent: 'center', alignItems: 'center'
+      }}>
+        <div className="spinner-border" style={{ color: colores.primario }}></div>
+      </div>
+    )
   }
 
   // Popup de sesión expirada
   if (sesionExpirada) {
     return (
-      <div className="container mt-5">
-        <div className="card text-center" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-          <div className="card-body p-5">
-            <i className="fa-solid fa-clock-rotate-left fa-3x text-warning mb-3"></i>
-            <h4 className="mb-2">Tu sesión ha expirado</h4>
-            <p className="text-muted mb-0">Escanea nuevamente el código QR de tu mesa.</p>
+      <div style={{
+        minHeight: '100vh', backgroundColor: colores.fondo,
+        display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px'
+      }}>
+        <div style={{
+          ...tarjeta, padding: '40px', textAlign: 'center', maxWidth: '420px', width: '100%'
+        }}>
+          <div style={{
+            width: '56px', height: '56px', margin: '0 auto 16px auto',
+            borderRadius: '50%', backgroundColor: colores.advertenciaFondo,
+            color: colores.advertenciaTexto,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <FiClock size={24} />
           </div>
+          <h4 style={{ fontWeight: 700, color: colores.texto }}>Tu sesión ha expirado</h4>
+          <p style={{ color: colores.textoSuave, marginBottom: 0 }}>
+            Escanea nuevamente el código QR de tu mesa.
+          </p>
         </div>
       </div>
     )
@@ -378,137 +495,335 @@ function Menu() {
   // QR inválido / error
   if (error) {
     return (
-      <div className="container mt-5">
-        <div className="alert alert-danger text-center">
-          <i className={`fa-solid ${esMenuPublico ? 'fa-store' : 'fa-qrcode'} me-2`}></i>
-          {error}
+      <div style={{
+        minHeight: '100vh', backgroundColor: colores.fondo,
+        display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px'
+      }}>
+        <div style={{
+          ...tarjeta,
+          padding: '28px', textAlign: 'center', maxWidth: '440px', width: '100%',
+          borderLeft: `4px solid ${colores.error}`
+        }}>
+          <div style={{
+            width: '52px', height: '52px', margin: '0 auto 14px auto',
+            borderRadius: '50%', backgroundColor: colores.errorFondo,
+            color: colores.error,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <FiAlertTriangle size={22} />
+          </div>
+          <h5 style={{ fontWeight: 700, color: colores.texto, marginBottom: '8px' }}>
+            {error === 'Menú no disponible' ? 'Menú no disponible' : 'No se pudo abrir el menú'}
+          </h5>
+          <p style={{ color: colores.textoSuave, marginBottom: '16px', fontSize: '14px' }}>{error}</p>
+          {esCliente ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => navigate('/favoritos')}
+              style={{ ...btnPrimario, minHeight: '42px' }}
+            >
+              <FiHeart style={{ marginRight: '6px' }} /> Ir a mis favoritos
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => navigate('/login')}
+              style={{ ...btnPrimario, minHeight: '42px' }}
+            >
+              Volver al inicio
+            </button>
+          )}
         </div>
       </div>
     )
   }
 
+  const tituloMenu = esMenuPublico
+    ? (nombreRestaurante || 'Menú')
+    : `Menú${nombreMesa ? ` — ${nombreMesa}` : ''}`
+
   return (
-    <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="mb-0">
-          {esMenuPublico
-            ? nombreRestaurante || 'Menú'
-            : `Menú${nombreMesa ? ` — ${nombreMesa}` : ''}`}
-        </h2>
-        <div className="d-flex align-items-center gap-2">
-          {!esMenuPublico && <span className="badge bg-success">Sesión activa</span>}
-          {totalItems > 0 && (
-            <button
-              className="btn btn-sm position-relative"
-              style={{ backgroundColor: '#1a3c34', color: 'white' }}
-              onClick={() => navigate('/carrito')}
-            >
-              <FiShoppingCart />
-              <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                {totalItems}
-              </span>
-            </button>
+    <div style={{ minHeight: '100vh', backgroundColor: colores.fondo, paddingBottom: '92px' }}>
+      <div className="container" style={{ maxWidth: '1200px' }}>
+        <div style={{ paddingTop: '24px' }}>
+          {/* Encabezado */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            flexWrap: 'wrap', gap: '12px', marginBottom: '20px'
+          }}>
+            <div>
+              <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>{tituloMenu}</h2>
+              <small style={{ color: colores.textoSuave }}>
+                Explora la carta y agrega lo que te antoje
+              </small>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              {esCliente && (
+                <button
+                  type="button"
+                  className="btn d-flex align-items-center"
+                  style={{ ...btnGhost, minHeight: '44px' }}
+                  onClick={() => navigate('/favoritos')}
+                >
+                  <FiHeart style={{ marginRight: '6px', color: colores.error }} /> Mis favoritos
+                </button>
+              )}
+              {!esMenuPublico && (
+                <span style={estiloBadge(colores.exitoFondo, colores.exitoTexto)}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: colores.exito }} />
+                  Sesión activa
+                </span>
+              )}
+              {totalItems > 0 && (
+                <button
+                  className="btn d-none d-md-flex"
+                  style={{ ...btnPrimario, minHeight: '44px', alignItems: 'center' }}
+                  onClick={() => navigate('/carrito')}
+                >
+                  <FiShoppingCart style={{ marginRight: '6px' }} />
+                  Ver pedido ({totalItems})
+                </button>
+              )}
+            </div>
+          </div>
+
+          {esCliente && errorFavorito && (
+            <div role="alert" style={{
+              ...tarjeta, padding: '10px 14px', marginBottom: '14px',
+              backgroundColor: colores.errorFondo, color: colores.errorTexto,
+              fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <FiAlertTriangle /> {errorFavorito}
+            </div>
+          )}
+
+          {/* RF003 — Tipo de servicio.
+              Solo tiene sentido en el enlace público: el QR ya representa una
+              mesa física con su contexto asociado (RF001/RF004/RF022). */}
+          {esMenuPublico && (
+            <SelectorTipoServicio
+              seleccionado={tipoServicio}
+              onConfirmar={confirmarTipoServicio}
+              error={errorTipoServicio}
+            />
+          )}
+
+          {/* RF031 — Selección explícita de sucursal en menú público
+              solo cuando el restaurante tiene varias activas. */}
+          {esMenuPublico && sucursalesDisponibles.length > 1 && (
+            <SelectorSucursal
+              sucursales={sucursalesDisponibles}
+              seleccionada={sucursal}
+              onSeleccionar={cambiarSucursalPublica}
+            />
+          )}
+          {requiereSeleccionSucursal && (
+            <div role="status" style={{
+              ...tarjeta, padding: '12px 16px', marginBottom: '16px',
+              color: colores.advertenciaTexto, backgroundColor: colores.advertenciaFondo,
+              fontSize: '13px'
+            }}>
+              {errorSucursalMenu || 'Selecciona una sucursal para ver los productos disponibles y agregarlos al pedido.'}
+            </div>
+          )}
+
+          {/* RF019 — Búsqueda de productos */}
+          {categorias.length > 0 && (
+            <BuscadorProductos
+              categoriasDisponibles={categorias}
+              texto={textoBusqueda}
+              categoriaId={categoriaFiltro}
+              onChange={aplicarBusqueda}
+            />
+          )}
+
+          {hayFiltroActivo && totalVisibles === 0 ? (
+            /* RF019 — Sin coincidencias */
+            <div style={{ ...tarjeta, padding: '48px 24px', textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{
+                width: '52px', height: '52px', margin: '0 auto 14px auto',
+                borderRadius: '50%', backgroundColor: colores.superficie,
+                color: colores.textoSuaveClaro,
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <FiSearch size={22} />
+              </div>
+              <div style={{ fontWeight: 700, color: colores.texto, marginBottom: '4px' }}>
+                No se encontraron productos
+              </div>
+              <small style={{ color: colores.textoSuave }}>
+                Pruebe con otro texto o cambie el filtro de categoría.
+              </small>
+            </div>
+          ) : categorias.length === 0 ? (
+            <div style={{ ...tarjeta, padding: '48px 24px', textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{ fontWeight: 700, color: colores.texto }}>Menú sin productos por ahora</div>
+              <small style={{ color: colores.textoSuave }}>
+                Vuelve a entrar en unos minutos; la carta se actualiza automáticamente.
+              </small>
+            </div>
+          ) : (
+            menuFiltrado.map(categoria => (
+              <div key={categoria.nombre} style={{ marginBottom: '28px' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px'
+                }}>
+                  <h4 style={{ margin: 0, fontWeight: 700, color: colores.texto, fontSize: '18px' }}>
+                    {categoria.nombre}
+                  </h4>
+                  <span style={estiloBadge(colores.superficie, colores.textoSuave)}>
+                    {categoria.productos.length} {categoria.productos.length === 1 ? 'producto' : 'productos'}
+                  </span>
+                </div>
+                <div className="row g-3">
+                  {categoria.productos.map(item => (
+                    <div key={item.id} className="col-12 col-sm-6 col-lg-4">
+                      <div
+                        style={{
+                          ...tarjeta,
+                          overflow: 'hidden',
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          cursor: item.disponible ? 'pointer' : 'default',
+                          opacity: item.disponible ? 1 : 0.85
+                        }}
+                        role={item.disponible ? 'button' : undefined}
+                        tabIndex={item.disponible ? 0 : -1}
+                        onClick={() => manejarClickProducto(item)}
+                        onKeyDown={(e) => {
+                          if (item.disponible && (e.key === 'Enter' || e.key === ' ')) {
+                            e.preventDefault()
+                            manejarClickProducto(item)
+                          }
+                        }}
+                      >
+                        {/* Imagen 16:10 */}
+                        <div style={{ position: 'relative', aspectRatio: '16 / 10', overflow: 'hidden', backgroundColor: colores.superficie }}>
+                          {item.imagen ? (
+                            <img
+                              src={item.imagen}
+                              alt={item.nombre}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '100%', height: '100%',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                              <i className="fa-solid fa-utensils" style={{ fontSize: '1.6rem', color: colores.textoSuaveClaro }}></i>
+                            </div>
+                          )}
+                          {esCliente && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                alternarFavorito(item)
+                              }}
+                              onKeyDown={(e) => e.stopPropagation()}
+                              disabled={favoritoEnCurso.has(item.id)}
+                              aria-pressed={favoritos.has(item.id)}
+                              aria-label={favoritos.has(item.id)
+                                ? `Quitar ${item.nombre} de favoritos`
+                                : `Guardar ${item.nombre} en favoritos`}
+                              title={favoritos.has(item.id) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                              style={{
+                                position: 'absolute', top: '10px', left: '10px',
+                                width: '36px', height: '36px', borderRadius: '50%',
+                                border: `1px solid ${colores.borde}`,
+                                backgroundColor: 'rgba(255,255,255,0.94)',
+                                color: favoritos.has(item.id) ? colores.error : colores.textoSuave,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: favoritoEnCurso.has(item.id) ? 'wait' : 'pointer',
+                                boxShadow: sombras.nivel1
+                              }}
+                            >
+                              <FiHeart
+                                size={16}
+                                fill={favoritos.has(item.id) ? colores.error : 'none'}
+                              />
+                            </button>
+                          )}
+                          {!item.disponible && (
+                            <span style={{
+                              position: 'absolute', top: '10px', right: '10px',
+                              ...estiloBadge(colores.errorFondo, colores.errorTexto),
+                              boxShadow: sombras.nivel2
+                            }}>
+                              Agotado
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Cuerpo */}
+                        <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                          <h5 style={{
+                            margin: 0, fontWeight: 600, fontSize: '15px',
+                            color: colores.texto, lineHeight: '1.35'
+                          }}>
+                            {item.nombre}
+                          </h5>
+                          <p className="truncar-2" style={{
+                            margin: '6px 0 10px 0', fontSize: '12.5px',
+                            color: colores.textoSuave, minHeight: '32px'
+                          }}>
+                            {item.descripcion || ''}
+                          </p>
+
+                          <div style={{ marginTop: 'auto' }}>
+                            <div className="tnum" style={{
+                              fontWeight: 700, color: colores.primario,
+                              fontSize: '17px', marginBottom: '10px', ...cifrasTabulares
+                            }}>
+                              {formatoPrecio(item.precio)}
+                            </div>
+                            {item.disponible ? (
+                              <button
+                                type="button"
+                                className="btn w-100"
+                                onClick={(e) => { e.stopPropagation(); manejarClickProducto(item) }}
+                                disabled={requiereSeleccionSucursal}
+                                style={{
+                                  ...btnPrimario,
+                                  minHeight: '44px',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                                }}
+                                aria-label={`Agregar ${item.nombre}`}
+                              >
+                                <FiPlus />
+                                {item.tieneOpciones ? 'Personalizar' : 'Agregar'}
+                              </button>
+                            ) : (
+                              <div style={{
+                                minHeight: '44px', borderRadius: radios.sm,
+                                backgroundColor: colores.superficie,
+                                color: colores.textoSuaveClaro,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontWeight: 600, fontSize: '13px'
+                              }}>
+                                No disponible
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+
+          {codigoMesa && (
+            <div style={{ ...tarjeta, padding: '14px 16px' }}>
+              <small style={{ color: colores.textoSuave }}>Mesa: {nombreMesa || codigoMesa}</small>
+            </div>
           )}
         </div>
       </div>
-
-      {/* RF003 — Tipo de servicio.
-          Solo tiene sentido en el enlace público: el QR ya representa una
-          mesa física con su contexto asociado (RF001/RF004/RF022).
-          En QR no se muestra, no se llama al backend y no se toca la sesión. */}
-      {esMenuPublico && (
-        <SelectorTipoServicio
-          seleccionado={tipoServicio}
-          onConfirmar={confirmarTipoServicio}
-          error={errorTipoServicio}
-        />
-      )}
-
-      {/* RF031 — Selección explícita de sucursal en menú público
-          solo cuando el restaurante tiene varias activas. */}
-      {esMenuPublico && sucursalesDisponibles.length > 1 && (
-        <SelectorSucursal
-          sucursales={sucursalesDisponibles}
-          seleccionada={sucursal}
-          onSeleccionar={setSucursal}
-        />
-      )}
-
-      {/* RF019 — Búsqueda de productos */}
-      {categorias.length > 0 && (
-        <BuscadorProductos
-          categoriasDisponibles={categorias}
-          texto={textoBusqueda}
-          categoriaId={categoriaFiltro}
-          onChange={aplicarBusqueda}
-        />
-      )}
-
-      {hayFiltroActivo && totalVisibles === 0 ? (
-        /* RF019 — Sin coincidencias */
-        <div className="text-center py-5">
-          <i className="fa-solid fa-magnifying-glass fa-2x text-muted mb-3 d-block"></i>
-          <p className="mb-1">No se encontraron productos</p>
-          <small className="text-muted">
-            Pruebe con otro texto o cambie el filtro de categoría.
-          </small>
-        </div>
-      ) : categorias.length === 0 ? (
-        <div className="text-center text-muted mt-5">
-          <p>No hay productos disponibles en este momento.</p>
-        </div>
-      ) : (
-        menuFiltrado.map(categoria => (
-          <div key={categoria.nombre} className="mb-4">
-            <h4 className="border-bottom pb-2" style={{ color: '#1a3c34' }}>
-              {categoria.nombre}
-            </h4>
-            <div className="row mt-2">
-              {categoria.productos.map(item => (
-                <div key={item.id} className="col-md-4 mb-3">
-                  <div
-                    className="card h-100"
-                    style={{ cursor: item.disponible ? 'pointer' : 'default' }}
-                    onClick={() => manejarClickProducto(item)}
-                  >
-                    {item.imagen ? (
-                      <img src={item.imagen} className="card-img-top" alt={item.nombre}
-                        style={{ height: '180px', objectFit: 'cover' }} />
-                    ) : (
-                      <div className="card-img-top d-flex align-items-center justify-content-center bg-light"
-                        style={{ height: '180px' }}>
-                        <i className="fa-solid fa-utensils text-muted fa-3x"></i>
-                      </div>
-                    )}
-                    <div className="card-body">
-                      <h5 className="card-title">{item.nombre}</h5>
-                      <p className="card-text text-muted">{item.descripcion || ''}</p>
-                      <p className="card-text">
-                        <strong>${parseFloat(item.precio).toLocaleString('es-CO')}</strong>
-                      </p>
-                      {!item.disponible && (
-                        <span className="badge bg-danger">No disponible</span>
-                      )}
-                      {item.disponible && (
-                        <span className="text-success small">
-                          <i className="fa-solid fa-plus me-1"></i>
-                          {item.tieneOpciones ? 'Clic para personalizar' : 'Clic para agregar'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-
-      {codigoMesa && (
-        <div className="mt-4 p-3 bg-light rounded">
-          <small className="text-muted">Mesa: {nombreMesa || codigoMesa}</small>
-        </div>
-      )}
 
       {/* RF020 — Modal de personalización */}
       {productoParaPersonalizar && (
@@ -528,6 +843,49 @@ function Menu() {
           productoActual={menuFiltrado[0].productos[0]}
           onAgregar={() => {}}
         />
+      )}
+
+      {/* Barra inferior de pedido (móvil) — siempre visible con items */}
+      {totalItems > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1030,
+          backgroundColor: colores.tarjeta,
+          borderTop: `1px solid ${colores.borde}`,
+          boxShadow: sombras.nivel2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '12px 16px max(12px, env(safe-area-inset-bottom)) 16px'
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: colores.texto, whiteSpace: 'nowrap' }}>
+              {totalItems} {totalItems === 1 ? 'producto' : 'productos'}
+            </div>
+            <div className="tnum" style={{ fontSize: '15px', fontWeight: 700, color: colores.primario, ...cifrasTabulares }}>
+              {formatoPrecio(subtotal)}
+              <small style={{ color: colores.textoSuave, fontWeight: 500 }}> subtotal</small>
+            </div>
+          </div>
+          <button
+            className="btn d-md-none"
+            style={{ ...btnPrimario, minHeight: '48px', padding: '0 20px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => navigate('/carrito')}
+          >
+            Ver pedido <FiArrowRight />
+          </button>
+          <button
+            className="btn d-none d-md-flex"
+            style={{ ...btnPrimario, minHeight: '48px', padding: '0 20px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => navigate('/carrito')}
+          >
+            Ir al carrito <FiArrowRight />
+          </button>
+        </div>
       )}
     </div>
   )

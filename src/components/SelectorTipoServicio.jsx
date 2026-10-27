@@ -1,4 +1,5 @@
 import { FiCheckCircle } from 'react-icons/fi'
+import { colores, tarjeta } from '../styles/tokens.js'
 
 /**
  * RF003 — Seleccionar tipo de servicio.
@@ -22,11 +23,11 @@ function SelectorTipoServicio({ seleccionado, onConfirmar, error }) {
   return (
     <div
       className="card mb-4"
-      style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}
+      style={tarjeta}
     >
       <div className="card-body">
         <h5 className="mb-3">
-          <i className="fa-solid fa-concierge-bell me-2" style={{ color: '#1a3c34' }}></i>
+          <i className="fa-solid fa-concierge-bell me-2" style={{ color: colores.primario }}></i>
           Tipo de servicio
         </h5>
 
@@ -37,8 +38,8 @@ function SelectorTipoServicio({ seleccionado, onConfirmar, error }) {
                 className="d-flex align-items-center gap-2 p-3 border rounded"
                 style={{
                   cursor: 'pointer',
-                  borderColor: seleccionado === opcion.valor ? '#1a3c34' : '#dee2e6',
-                  backgroundColor: seleccionado === opcion.valor ? '#f2f7f5' : '#fff'
+                  borderColor: seleccionado === opcion.valor ? colores.primario : colores.borde,
+                  backgroundColor: seleccionado === opcion.valor ? colores.mint : colores.tarjeta
                 }}
               >
                 <input
