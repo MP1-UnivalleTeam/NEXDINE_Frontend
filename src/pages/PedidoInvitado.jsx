@@ -9,15 +9,10 @@ import {
   obtenerSucursalesDisponibles,
   obtenerContextoMenu
 } from '../utils/contextoMenu.js'
+import { formatearDinero } from '../utils/dinero.js'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 
-function formatoPrecio(valor) {
-  const numero = Number.isFinite(Number(valor)) ? Number(valor) : 0
-  return `$${new Intl.NumberFormat('es-CO', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  }).format(numero)}`
-}
+const formatoPrecio = formatearDinero
 
 /**
  * RF031 — Pedido como invitado.

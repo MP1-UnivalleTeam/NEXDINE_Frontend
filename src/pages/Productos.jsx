@@ -5,6 +5,8 @@ import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
 import CargadorImagen from '../components/CargadorImagen.jsx'
 import GestionCupones from '../components/GestionCupones.jsx'
+import MoneyInput from '../components/MoneyInput.jsx'
+import { formatearDinero } from '../utils/dinero.js'
 import { obtenerMensajeError, MENSAJES, CARGANDO } from '../services/mensajes.js'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, input, cifrasTabulares } from '../styles/tokens.js'
 
@@ -466,14 +468,9 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
       return
     }
 
-    const precioNum = parseFloat(formData.precio)
-    if (isNaN(precioNum)) {
-      setErrorMessage('El precio debe ser un valor numérico válido')
-      return
-    }
-
-    if (precioNum <= 0) {
-      setErrorMessage('El precio debe ser mayor que 0')
+    const precioNum = Number(String(formData.precio).replace(/[^\d]/g, ''))
+    if (!Number.isFinite(precioNum) || precioNum <= 0) {
+      setErrorMessage('El precio debe ser un valor numérico válido y mayor que 0')
       return
     }
 
@@ -496,12 +493,14 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
     setSaving(true)
 
     try {
+      const precioApi = String(precioNum)
+
       if (archivoImagen) {
         // Multipart: el backend recibe el archivo y lo sube a Cloudinary
         const fd = new FormData()
         fd.append('nombre', formData.nombre.trim())
         fd.append('descripcion', formData.descripcion || '')
-        fd.append('precio', formData.precio)
+        fd.append('precio', precioApi)
         if (categoriaId) fd.append('categoriaId', categoriaId)
         selectedSucursales.forEach(id => fd.append('sucursalIds', id))
         fd.append('imagen', archivoImagen)
@@ -518,7 +517,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
         const params = new URLSearchParams()
         params.append('nombre', formData.nombre.trim())
         params.append('descripcion', formData.descripcion || '')
-        params.append('precio', formData.precio)
+        params.append('precio', precioApi)
         if (categoriaId) {
           params.append('categoriaId', categoriaId)
         }
@@ -537,7 +536,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
         const params = new URLSearchParams()
         params.append('nombre', formData.nombre.trim())
         params.append('descripcion', formData.descripcion || '')
-        params.append('precio', formData.precio)
+        params.append('precio', precioApi)
         if (categoriaId) {
           params.append('categoriaId', categoriaId)
         }
@@ -551,7 +550,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
         const params = new URLSearchParams()
         params.append('nombre', formData.nombre.trim())
         params.append('descripcion', formData.descripcion || '')
-        params.append('precio', formData.precio)
+        params.append('precio', precioApi)
         if (categoriaId) {
           params.append('categoriaId', categoriaId)
         }
@@ -914,14 +913,12 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                             Precio
                             <span className="ms-1" style={{ color: colores.textoSuave, fontWeight: 400 }}>(COP)</span>
                           </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
+                          <MoneyInput
+                            name="precio"
                             placeholder="Ej: 28900"
                             required
                             value={formData.precio}
-                            onChange={(e) => setFormData({...formData, precio: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
                             style={{ ...input, width: '100%' }}
                           />
                         </div>
