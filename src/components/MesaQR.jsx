@@ -1,7 +1,7 @@
 import { QRCodeSVG } from 'qrcode.react'
 
 function MesaQR({ mesaId, size = 200 }) {
-  const url = `${window.location.origin}/menu?mesa=${mesaId}`
+  const url = `${window.location.origin}/menu?mesa=${encodeURIComponent(mesaId)}`
 
   return (
     <div className="text-center">

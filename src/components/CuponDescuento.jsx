@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FiTag, FiX, FiCheck } from 'react-icons/fi'
 import { validarCupon } from '../services/pedidos.js'
+import { obtenerMensajeError } from '../services/mensajes.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { formatearDinero } from '../utils/dinero.js'
 import { colores, tarjeta } from '../styles/tokens.js'
@@ -18,13 +19,42 @@ function CuponDescuento() {
   const [codigo, setCodigo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [intentoValidacion, setIntentoValidacion] = useState(0)
   const { cupon, aplicarCupon, quitarCupon, subtotal } = useCarrito()
 
   const montoMinimoNoAlcanzado = Boolean(
     cupon?.montoMinimo && Number(cupon.montoMinimo) > subtotal
   )
 
+  useEffect(() => {
+    if (!cupon?.codigo) return undefined
+
+    let vigente = true
+    setError('')
+    validarCupon(cupon.codigo, subtotal)
+      .then(data => {
+        if (!vigente) return
+        aplicarCupon({
+          codigo: data.codigo || cupon.codigo,
+          tipo: data.tipo,
+          valor: data.valor,
+          montoMinimo: data.montoMinimo,
+          descuento: data.descuento
+        })
+      })
+      .catch(err => {
+        if (!vigente) return
+        if ([400, 404].includes(err.response?.status)) {
+          quitarCupon()
+        }
+        setError(obtenerMensajeError(err, 'El cupón ya no está disponible.'))
+      })
+
+    return () => { vigente = false }
+  }, [cupon?.codigo, subtotal, intentoValidacion, aplicarCupon, quitarCupon])
+
   const handleAplicar = async () => {
+    if (loading) return
     if (!codigo.trim()) {
       setError('Ingrese un código de cupón')
       return
@@ -44,7 +74,7 @@ function CuponDescuento() {
       })
       setCodigo('')
     } catch (err) {
-      setError(err.response?.data?.error || 'Cupón inválido o expirado')
+      setError(obtenerMensajeError(err, 'Cupón inválido o expirado.'))
     } finally {
       setLoading(false)
     }
@@ -90,6 +120,18 @@ function CuponDescuento() {
                 El subtotal mínimo para este cupón es {formatearDinero(cupon.montoMinimo)}.
               </small>
             )}
+            {error && (
+              <div className="d-flex align-items-center justify-content-between gap-2 mt-2">
+                <small className="text-danger" role="alert">{error}</small>
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0"
+                  onClick={() => setIntentoValidacion(intento => intento + 1)}
+                >
+                  Reintentar
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -98,6 +140,7 @@ function CuponDescuento() {
                 type="text"
                 className="form-control form-control-sm"
                 placeholder="Código de cupón"
+                maxLength={50}
                 value={codigo}
                 onChange={(e) => { setCodigo(e.target.value.toUpperCase()); setError('') }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAplicar()}
