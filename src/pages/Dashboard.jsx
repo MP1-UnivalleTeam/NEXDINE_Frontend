@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FiPlus } from 'react-icons/fi'
 import api from '../services/api.js'
@@ -43,6 +43,9 @@ function Dashboard() {
     direccion: '',
     sucursalId: ''
   })
+  const [editUserSucursalLoading, setEditUserSucursalLoading] = useState(false)
+  const [editUserSucursalError, setEditUserSucursalError] = useState('')
+  const editUserSucursalRequest = useRef(0)
 
   useEffect(() => {
     checkAuth()
@@ -103,7 +106,7 @@ function Dashboard() {
       if (evento.key !== 'Escape') return
       evento.preventDefault()
       if (showEditModal) {
-        setShowEditModal(false)
+        closeEditUserModal()
       } else {
         setShowCreateUserModal(false)
         setFormError('')
@@ -132,14 +135,32 @@ function Dashboard() {
    * Evita que el selector aparezca "Sin asignar" cuando sí tiene sucursal.
    */
   const cargarSucursalDeUsuario = async (userId) => {
+    const requestId = ++editUserSucursalRequest.current
+    setEditUserSucursalLoading(true)
+    setEditUserSucursalError('')
     try {
       const response = await api.get(`/users/${userId}/sucursal`)
       const sid = response.data?.sucursalId ?? ''
-      setEditUser(prev => ({ ...prev, sucursalId: sid ? String(sid) : '' }))
+      if (requestId === editUserSucursalRequest.current) {
+        setEditUser(prev => prev.id === userId ? { ...prev, sucursalId: sid ? String(sid) : '' } : prev)
+      }
     } catch (err) {
-      // Si no se puede resolver, se deja el valor recibido en el listado
       console.error('Error cargando sucursal del usuario:', err)
+      if (requestId === editUserSucursalRequest.current) {
+        setEditUserSucursalError(obtenerMensajeError(err, 'No fue posible consultar la sucursal asignada.'))
+      }
+    } finally {
+      if (requestId === editUserSucursalRequest.current) {
+        setEditUserSucursalLoading(false)
+      }
     }
+  }
+
+  const closeEditUserModal = () => {
+    editUserSucursalRequest.current += 1
+    setShowEditModal(false)
+    setEditUserSucursalError('')
+    setEditUserSucursalLoading(false)
   }
 
   const closeCreateUserModal = () => {
@@ -203,6 +224,9 @@ function Dashboard() {
   }
 
   const handleEdit = (user) => {
+    editUserSucursalRequest.current += 1
+    setEditUserSucursalError('')
+    setEditUserSucursalLoading(false)
     setEditUser({
       id: user.id,
       nombre: user.nombre,
@@ -213,13 +237,18 @@ function Dashboard() {
     })
     setFormError('')
     setShowEditModal(true)
-    // Confirmar la asignación real con el backend
-    cargarSucursalDeUsuario(user.id)
+    if (esSuperadmin()) {
+      cargarSucursalDeUsuario(user.id)
+    }
   }
 
   const handleUpdateUser = async (e) => {
     e.preventDefault()
     setFormError('')
+    if (esSuperadmin() && (editUserSucursalLoading || editUserSucursalError)) {
+      setFormError('Consulta la sucursal asignada antes de guardar los cambios.')
+      return
+    }
     const params = new URLSearchParams()
     params.append('id', editUser.id)
     params.append('nombre', editUser.nombre)
@@ -492,7 +521,7 @@ function Dashboard() {
       {/* Modal de Edición */}
       {showEditModal && (
         <>
-          <div onClick={() => setShowEditModal(false)} style={{
+          <div onClick={closeEditUserModal} style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
             backgroundColor: 'rgba(17, 54, 46, 0.35)', zIndex: 1040
           }} />
@@ -501,13 +530,25 @@ function Dashboard() {
               <div className="modal-content">
                 <div className="modal-header" style={{ backgroundColor: colores.primario, color: 'white' }}>
                   <h5 className="modal-title"><i className="fa-solid fa-pen me-2"></i>Editar Usuario</h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowEditModal(false)}></button>
+                  <button type="button" className="btn-close btn-close-white" aria-label="Cerrar" onClick={closeEditUserModal}></button>
                 </div>
                 <form onSubmit={handleUpdateUser}>
                   <div className="modal-body">
                     {formError && (
                       <div className="alert alert-danger py-2 small" role="alert">
                         <i className="fa-solid fa-circle-exclamation me-1"></i>{formError}
+                      </div>
+                    )}
+                    {editUserSucursalError && (
+                      <div className="alert alert-danger py-2 small" role="alert">
+                        {editUserSucursalError}{' '}
+                        <button
+                          type="button"
+                          className="btn btn-link btn-sm p-0"
+                          onClick={() => cargarSucursalDeUsuario(editUser.id)}
+                        >
+                          Reintentar
+                        </button>
                       </div>
                     )}
                     <input type="hidden" name="id" value={editUser.id} />
@@ -545,6 +586,7 @@ function Dashboard() {
                           name="sucursalId"
                           className="form-select"
                           value={editUser.sucursalId || ''}
+                          disabled={editUserSucursalLoading || Boolean(editUserSucursalError)}
                           onChange={(e) => setEditUser({...editUser, sucursalId: e.target.value})}
                         >
                           <option value="">Sin asignar</option>
@@ -552,6 +594,9 @@ function Dashboard() {
                             <option key={s.id} value={s.id}>{s.nombre}</option>
                           ))}
                         </select>
+                        {editUserSucursalLoading && (
+                          <small className="text-muted" role="status">Consultando sucursal asignada...</small>
+                        )}
                         <small className="text-muted">
                           Cambiar o quitar la sucursal reemplaza la asignación actual.
                         </small>
@@ -581,8 +626,15 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowEditModal(false)}>Cancelar</button>
-                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: colores.primario, color: 'white' }}>Guardar cambios</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeEditUserModal}>Cancelar</button>
+                    <button
+                      type="submit"
+                      className="btn btn-sm"
+                      style={{ backgroundColor: colores.primario, color: 'white' }}
+                      disabled={editUserSucursalLoading || Boolean(editUserSucursalError)}
+                    >
+                      Guardar cambios
+                    </button>
                   </div>
                 </form>
               </div>
