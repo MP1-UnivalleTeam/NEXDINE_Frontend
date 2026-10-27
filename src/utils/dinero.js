@@ -78,10 +78,26 @@ export function calcularTotales({ items = [], cupon = null, propina = null, tasa
   }
 }
 
-export function formatearDinero(valor) {
+export function formatearNumeroSinDecimales(valor) {
   const numero = Number.isFinite(Number(valor)) ? Number(valor) : 0
-  return `$${new Intl.NumberFormat('es-CO', {
+  return new Intl.NumberFormat('es-CO', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  }).format(numero)}`
+    maximumFractionDigits: 0
+  }).format(numero)
+}
+
+export function formatearDinero(valor) {
+  return `$${formatearNumeroSinDecimales(valor)}`
+}
+
+export function normalizarValorMoneda(valor) {
+  if (valor === null || valor === undefined || valor === '') return ''
+  const texto = String(valor).replace(/[^\d]/g, '')
+  return texto === '' ? '' : texto
+}
+
+export function aNumeroMoneda(valor) {
+  if (valor === null || valor === undefined || valor === '') return 0
+  const numero = Number(String(valor).replace(/[^\d.-]/g, '').replace(',', '.'))
+  return Number.isFinite(numero) ? Math.trunc(numero) : 0
 }

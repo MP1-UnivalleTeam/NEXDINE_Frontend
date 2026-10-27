@@ -14,6 +14,7 @@ import {
   guardarSucursalesDisponibles
 } from '../utils/contextoMenu.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
+import { formatearDinero } from '../utils/dinero.js'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 
 const CLAVE_TOKEN = 'sessionToken'
@@ -32,13 +33,7 @@ const INTERVALO_MENU_MS = 45000
  * Formateador de precios del menú.
  * El valor SIEMPRE proviene del backend; aquí solo se presenta.
  */
-function formatoPrecio(valor) {
-  const numero = Number.isFinite(Number(valor)) ? Number(valor) : 0
-  return `$${new Intl.NumberFormat('es-CO', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  }).format(numero)}`
-}
+const formatoPrecio = formatearDinero
 
 function Menu() {
   const [searchParams] = useSearchParams()

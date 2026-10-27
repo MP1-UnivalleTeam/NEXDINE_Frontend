@@ -13,17 +13,12 @@ import ModalPersonalizacion from '../components/ModalPersonalizacion.jsx'
 import SelectorSucursal from '../components/SelectorSucursal.jsx'
 import { obtenerSugerencias } from '../services/pedidos.js'
 import { obtenerContextoMenu, obtenerSucursalesDisponibles } from '../utils/contextoMenu.js'
+import { formatearDinero } from '../utils/dinero.js'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, cifrasTabulares } from '../styles/tokens.js'
 
 const CLAVE_TOKEN = 'sessionToken'
 
-function formatoPrecio(valor) {
-  const numero = Number.isFinite(Number(valor)) ? Number(valor) : 0
-  return `$${new Intl.NumberFormat('es-CO', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  }).format(numero)}`
-}
+const formatoPrecio = formatearDinero
 
 function EncabezadoCarrito({ sucursal, totalItems, irAlMenu }) {
   return (

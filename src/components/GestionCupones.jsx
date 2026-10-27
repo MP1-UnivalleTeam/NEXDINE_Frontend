@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { FiEdit2, FiPlus, FiPower, FiRefreshCw, FiTag, FiTrash2, FiX } from 'react-icons/fi'
 import api from '../services/api.js'
+import MoneyInput from './MoneyInput.jsx'
 import { obtenerMensajeError } from '../services/mensajes.js'
 import { colores, radios, sombras, tarjeta, btnPrimario, btnGhost } from '../styles/tokens.js'
 
@@ -193,14 +194,28 @@ function GestionCupones({ onClose }) {
           <label className="form-label small fw-semibold" htmlFor="cupon-valor">
             {formulario.tipo === 'PORCENTAJE' ? 'Porcentaje (1–100)' : 'Valor del descuento'}
           </label>
-          <input id="cupon-valor" className="form-control" name="valor" type="number" required
-            min="0.01" max={formulario.tipo === 'PORCENTAJE' ? '100' : undefined}
-            step="0.01" value={formulario.valor} onChange={actualizarCampo} />
+          {formulario.tipo === 'PORCENTAJE' ? (
+            <input id="cupon-valor" className="form-control" name="valor" type="number" required
+              min="0.01" max="100" step="0.01" value={formulario.valor} onChange={actualizarCampo} />
+          ) : (
+            <MoneyInput
+              id="cupon-valor"
+              className="form-control"
+              name="valor"
+              value={formulario.valor}
+              onChange={actualizarCampo}
+            />
+          )}
         </div>
         <div className="col-md-4">
           <label className="form-label small fw-semibold" htmlFor="cupon-minimo">Compra mínima</label>
-          <input id="cupon-minimo" className="form-control" name="montoMinimo" type="number"
-            min="0" step="0.01" value={formulario.montoMinimo} onChange={actualizarCampo} />
+          <MoneyInput
+            id="cupon-minimo"
+            className="form-control"
+            name="montoMinimo"
+            value={formulario.montoMinimo}
+            onChange={actualizarCampo}
+          />
         </div>
         <div className="col-md-4">
           <label className="form-label small fw-semibold" htmlFor="cupon-usos">Límite de usos (opcional)</label>
