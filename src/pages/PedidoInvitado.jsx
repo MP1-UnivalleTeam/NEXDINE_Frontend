@@ -392,6 +392,11 @@ function PedidoInvitado() {
                     <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                       <span style={{ color: colores.textoSuave, minWidth: 0 }}>
                         {item.cantidad}x {item.producto.nombre}
+                        {item.observaciones && (
+                          <small style={{ display: 'block', overflowWrap: 'anywhere' }}>
+                            Observación: {item.observaciones}
+                          </small>
+                        )}
                       </span>
                       <span style={{ color: colores.texto, flexShrink: 0 }}>
                         {formatoPrecio((Number(item.precioUnitario) + Number(item.adicionalOpciones)) * Number(item.cantidad))}
