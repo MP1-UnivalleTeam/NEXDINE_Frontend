@@ -96,6 +96,24 @@ function Dashboard() {
   // Modal de creación de usuario
   const [showCreateUserModal, setShowCreateUserModal] = useState(false)
 
+  useEffect(() => {
+    if (!showEditModal && !showCreateUserModal) return
+
+    const manejarEscape = (evento) => {
+      if (evento.key !== 'Escape') return
+      evento.preventDefault()
+      if (showEditModal) {
+        setShowEditModal(false)
+      } else {
+        setShowCreateUserModal(false)
+        setFormError('')
+      }
+    }
+
+    window.addEventListener('keydown', manejarEscape)
+    return () => window.removeEventListener('keydown', manejarEscape)
+  }, [showEditModal, showCreateUserModal])
+
   const openCreateUserModal = () => {
     setFormError('')
     setNewUser({

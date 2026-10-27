@@ -37,6 +37,23 @@ function Mesas() {
     checkAuth()
   }, [])
 
+  useEffect(() => {
+    if (!showCreateModal && !qrMesa) return
+
+    const manejarEscape = (evento) => {
+      if (evento.key !== 'Escape') return
+      evento.preventDefault()
+      if (qrMesa) {
+        setQrMesa(null)
+      } else {
+        closeCreateModal()
+      }
+    }
+
+    window.addEventListener('keydown', manejarEscape)
+    return () => window.removeEventListener('keydown', manejarEscape)
+  }, [showCreateModal, qrMesa])
+
   const checkAuth = async () => {
     try {
       const response = await api.get('/api/auth/me')

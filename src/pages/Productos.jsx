@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FiPlus, FiEdit2, FiX, FiTrash2, FiCamera, FiUploadCloud, FiCheckCircle, FiXCircle, FiAlertTriangle } from 'react-icons/fi'
 import api from '../services/api.js'
@@ -43,6 +43,9 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
 
   // Checklist de sucursales donde se ofrece el producto
   const [selectedSucursales, setSelectedSucursales] = useState([])
+  const [loadingSucursalesProducto, setLoadingSucursalesProducto] = useState(false)
+  const [errorSucursalesProducto, setErrorSucursalesProducto] = useState('')
+  const solicitudSucursalesRef = useRef(0)
 
   // Loading del envío
   const [saving, setSaving] = useState(false)
@@ -73,6 +76,31 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   useEffect(() => {
     checkAuth()
   }, [])
+
+  useEffect(() => {
+    if (!showModal && !showUploadModal && !showCategoryModal && !showDeleteModal) return
+
+    const manejarEscape = (evento) => {
+      if (evento.key !== 'Escape') return
+      evento.preventDefault()
+
+      if (showUploadModal) {
+        setShowUploadModal(false)
+      } else if (showCategoryModal && !creatingCategory) {
+        closeCreateCategoryModal()
+      } else if (showDeleteModal && !deleting) {
+        closeDeleteModal()
+      } else if (showModal && !saving) {
+        closeModal()
+      }
+    }
+
+    window.addEventListener('keydown', manejarEscape)
+    return () => window.removeEventListener('keydown', manejarEscape)
+  }, [
+    showModal, showUploadModal, showCategoryModal, showDeleteModal,
+    creatingCategory, deleting, saving
+  ])
 
   const checkAuth = async () => {
     try {
@@ -207,12 +235,28 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
    * que el checklist al editar NO aparezca vacío por defecto.
    */
   const cargarSucursalesDeProducto = async (productoId) => {
+    const solicitud = ++solicitudSucursalesRef.current
+    setLoadingSucursalesProducto(true)
+    setErrorSucursalesProducto('')
     try {
       const response = await api.get(`/productos/${productoId}/sucursales`)
-      setSelectedSucursales(response.data || [])
+      if (!Array.isArray(response.data)) {
+        throw new Error('La respuesta de sucursales no tiene el formato esperado.')
+      }
+      if (solicitud === solicitudSucursalesRef.current) {
+        setSelectedSucursales(response.data.map(String))
+      }
     } catch (err) {
-      console.error('Error cargando sucursales del producto:', err)
-      setSelectedSucursales([])
+      if (solicitud === solicitudSucursalesRef.current) {
+        setSelectedSucursales([])
+        setErrorSucursalesProducto(
+          obtenerMensajeError(err, 'No fue posible cargar las sucursales del producto.')
+        )
+      }
+    } finally {
+      if (solicitud === solicitudSucursalesRef.current) {
+        setLoadingSucursalesProducto(false)
+      }
     }
   }
 
@@ -298,9 +342,12 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
 
   // Abrir modal para crear
   const openCreateModal = () => {
+    solicitudSucursalesRef.current += 1
     quitarImagenSeleccionada()
     setFormData({ nombre: '', descripcion: '', precio: '' })
     setSelectedSucursales([])
+    setLoadingSucursalesProducto(false)
+    setErrorSucursalesProducto('')
     setCategoriaId('')
     setSelectedProducto(null)
     setModalMode('crear')
@@ -311,22 +358,24 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
 
   // Marcar / desmarcar una sucursal del checklist
   const toggleSucursal = (sucursalId) => {
+    const id = String(sucursalId)
     setSelectedSucursales(prev =>
-      prev.includes(sucursalId)
-        ? prev.filter(id => id !== sucursalId)
-        : [...prev, sucursalId]
+      prev.includes(id)
+        ? prev.filter(selectedId => selectedId !== id)
+        : [...prev, id]
     )
   }
 
   // Marcar / desmarcar todas
   const toggleTodasSucursales = () => {
-    setSelectedSucursales(prev =>
-      prev.length === sucursales.length ? [] : sucursales.map(s => s.id)
-    )
+    setSelectedSucursales(prev => (
+      prev.length === sucursales.length ? [] : sucursales.map(s => String(s.id))
+    ))
   }
 
   // Abrir modal para editar
   const openEditModal = (producto) => {
+    solicitudSucursalesRef.current += 1
     // Sin archivo nuevo y sin URL manual: la imagen actual del producto
     // se conserva porque no se envía el campo imagen.
     quitarImagenSeleccionada()
@@ -339,6 +388,9 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
     setCategoriaId(producto.categoriaId || '')
     setModalMode('editar')
     setErrorMessage('')
+    setSelectedSucursales([])
+    setLoadingSucursalesProducto(true)
+    setErrorSucursalesProducto('')
     setShowModal(true)
     loadConfigImagen()
     // Checklist refleja las relaciones reales de producto_sucursal
@@ -346,12 +398,16 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   }
 
   // Cerrar modal
-  const closeModal = () => {
+  const closeModal = (forzar = false) => {
+    if (saving && !forzar) return
+    solicitudSucursalesRef.current += 1
     quitarImagenSeleccionada()
     setShowModal(false)
     setFormData({ nombre: '', descripcion: '', precio: '' })
     setSelectedProducto(null)
     setSelectedSucursales([])
+    setLoadingSucursalesProducto(false)
+    setErrorSucursalesProducto('')
     setCategoriaId('')
     setErrorMessage('')
     setSaving(false)
@@ -364,7 +420,8 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   }
 
   // Cerrar modal de confirmación
-  const closeDeleteModal = () => {
+  const closeDeleteModal = (forzar = false) => {
+    if (deleting && !forzar) return
     setShowDeleteModal(false)
     setProductoAEliminar(null)
   }
@@ -377,12 +434,12 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
     try {
       await api.delete(`/productos/${productoAEliminar.id}`)
       setSuccessMessage(MENSAJES.PRODUCTO_ELIMINADO)
-      closeDeleteModal()
+      closeDeleteModal(true)
       await loadProductos()
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (err) {
       // El producto permanece en la lista
-      closeDeleteModal()
+      closeDeleteModal(true)
       setErrorMessage(obtenerMensajeError(err, 'No fue posible eliminar el producto.'))
       setTimeout(() => setErrorMessage(''), 5000)
     } finally {
@@ -393,6 +450,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   // Manejar envío del formulario
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return
     setErrorMessage('')
 
     // Validaciones
@@ -414,6 +472,16 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
 
     if (precioNum <= 0) {
       setErrorMessage('El precio debe ser mayor que 0')
+      return
+    }
+
+    if (loadingSucursalesProducto) {
+      setErrorMessage('Espera a que termine la carga de las sucursales.')
+      return
+    }
+
+    if (errorSucursalesProducto) {
+      setErrorMessage('No se pudieron cargar las sucursales. Intenta cargarlas nuevamente antes de guardar.')
       return
     }
 
@@ -491,7 +559,8 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
         setSuccessMessage(MENSAJES.PRODUCTO_ACTUALIZADO)
       }
 
-      closeModal()
+      setSaving(false)
+      closeModal(true)
       await loadProductos()
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (err) {
@@ -627,8 +696,15 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                       )}
                     </td>
                     <td><strong style={{ color: colores.texto }}>{producto.nombre}</strong></td>
-                    <td className="truncar-2" style={{ color: colores.textoSuave, maxWidth: '200px', fontSize: '13px' }}>
-                      {producto.descripcion || '-'}
+                    <td style={{ color: colores.textoSuave, maxWidth: '260px', fontSize: '13px', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                      <span style={{
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 3,
+                        overflow: 'hidden'
+                      }}>
+                        {producto.descripcion?.trim() || '-'}
+                      </span>
                     </td>
                     <td className="tnum" style={{ color: colores.texto, fontWeight: 600, ...cifrasTabulares }}>
                       ${parseFloat(producto.precio).toLocaleString('es-CO')}
@@ -691,7 +767,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
         <>
           {/* Backdrop / Overlay */}
           <div
-            onClick={closeModal}
+            onClick={() => closeModal()}
             style={{
               position: 'fixed',
               top: 0,
@@ -700,11 +776,12 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
               height: '100%',
               backgroundColor: sombras.backdrop,
               backdropFilter: 'blur(4px)',
-              zIndex: 1040
+              zIndex: 1040,
+              cursor: saving ? 'wait' : 'default'
             }}
           />
           {/* Modal */}
-          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
+          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1" role="dialog" aria-modal="true">
             <div className="modal-dialog modal-dialog-centered modal-md" style={{ maxWidth: '600px' }}>
               <div style={{ ...tarjeta, boxShadow: sombras.nivel3, overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto' }}>
                 {/* Encabezado */}
@@ -726,7 +803,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                       </small>
                     </div>
                   </div>
-                  <button type="button" onClick={closeModal} style={{
+                  <button type="button" onClick={() => closeModal()} disabled={saving} style={{
                     border: 'none', background: 'transparent', color: colores.textoSuave,
                     cursor: 'pointer', fontSize: '18px', padding: '4px'
                   }} aria-label="Cerrar">
@@ -882,6 +959,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                           className="btn btn-link btn-sm p-0"
                           style={{ color: colores.secundario, fontSize: '0.78rem', fontWeight: 600 }}
                           onClick={toggleTodasSucursales}
+                          disabled={loadingSucursalesProducto || Boolean(errorSucursalesProducto)}
                         >
                           {selectedSucursales.length === sucursales.length
                             ? 'Desmarcar todas'
@@ -897,36 +975,59 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                           No hay sucursales registradas para este restaurante.
                         </div>
                       ) : (
-                        <div
-                          className="row g-2"
-                          style={{ maxHeight: '160px', overflowY: 'auto' }}
-                        >
-                          {sucursales.map(s => {
-                            const checked = selectedSucursales.includes(s.id)
-                            return (
-                              <div className="col-12 col-md-6" key={s.id}>
-                                <label style={{
-                                  display: 'flex', alignItems: 'center', gap: '10px',
-                                  padding: '10px 12px',
-                                  borderRadius: radios.sm,
-                                  border: checked ? `1px solid ${colores.primario}` : `1px solid ${colores.borde}`,
-                                  backgroundColor: checked ? colores.mint : colores.tarjeta,
-                                  cursor: 'pointer', fontSize: '13px', color: colores.texto,
-                                  fontWeight: 500
-                                }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => toggleSucursal(s.id)}
-                                    style={{ accentColor: colores.primario }}
-                                  />
-                                  {s.nombre}
-                                  {!s.activa && <small style={{ color: colores.textoSuave }}>(inactiva)</small>}
-                                </label>
-                              </div>
-                            )
-                          })}
-                        </div>
+                        <>
+                          {loadingSucursalesProducto && (
+                            <small role="status" style={{ color: colores.textoSuave, display: 'block', marginBottom: '8px' }}>
+                              Cargando sucursales asociadas...
+                            </small>
+                          )}
+                          {errorSucursalesProducto && (
+                            <div role="alert" style={{
+                              backgroundColor: colores.errorFondo, color: colores.errorTexto,
+                              borderRadius: radios.sm, padding: '10px 12px', fontSize: '13px', marginBottom: '8px'
+                            }}>
+                              {errorSucursalesProducto}{' '}
+                              <button
+                                type="button"
+                                className="btn btn-link btn-sm p-0"
+                                onClick={() => cargarSucursalesDeProducto(selectedProducto.id)}
+                              >
+                                Reintentar
+                              </button>
+                            </div>
+                          )}
+                          <div
+                            className="row g-2"
+                            style={{ maxHeight: '160px', overflowY: 'auto' }}
+                          >
+                            {sucursales.map(s => {
+                              const checked = selectedSucursales.includes(String(s.id))
+                              return (
+                                <div className="col-12 col-md-6" key={s.id}>
+                                  <label style={{
+                                    display: 'flex', alignItems: 'center', gap: '10px',
+                                    padding: '10px 12px',
+                                    borderRadius: radios.sm,
+                                    border: checked ? `1px solid ${colores.primario}` : `1px solid ${colores.borde}`,
+                                    backgroundColor: checked ? colores.mint : colores.tarjeta,
+                                    cursor: 'pointer', fontSize: '13px', color: colores.texto,
+                                    fontWeight: 500
+                                  }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      disabled={loadingSucursalesProducto || Boolean(errorSucursalesProducto)}
+                                      onChange={() => toggleSucursal(s.id)}
+                                      style={{ accentColor: colores.primario }}
+                                    />
+                                    {s.nombre}
+                                    {!s.activa && <small style={{ color: colores.textoSuave }}>(inactiva)</small>}
+                                  </label>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </>
                       )}
 
                       <small style={{ color: colores.textoSuave, display: 'block', marginTop: '8px' }}>
@@ -947,14 +1048,14 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                     position: 'sticky',
                     bottom: 0
                   }}>
-                    <button type="button" className="btn" onClick={closeModal} style={{ ...btnGhost, minHeight: '44px', padding: '0 16px' }}>
+                    <button type="button" className="btn" onClick={() => closeModal()} disabled={saving} style={{ ...btnGhost, minHeight: '44px', padding: '0 16px' }}>
                       <FiX style={{ marginRight: '5px' }} /> Cancelar
                     </button>
                     <button
                       type="submit"
                       className="btn"
                       style={{ ...btnPrimario, minHeight: '44px', padding: '0 18px' }}
-                      disabled={saving}
+                      disabled={saving || loadingSucursalesProducto || Boolean(errorSucursalesProducto)}
                     >
                       {saving ? (
                         <>
@@ -1056,7 +1157,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
         <>
           {/* Backdrop / Overlay */}
           <div
-            onClick={closeDeleteModal}
+            onClick={() => closeDeleteModal()}
             style={{
               position: 'fixed',
               top: 0,
@@ -1094,7 +1195,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                   padding: '14px 24px',
                   display: 'flex', justifyContent: 'flex-end', gap: '10px'
                 }}>
-                  <button type="button" className="btn" onClick={closeDeleteModal} style={{ ...btnGhost, minHeight: '44px', padding: '0 16px' }}>
+                  <button type="button" className="btn" onClick={() => closeDeleteModal()} disabled={deleting} style={{ ...btnGhost, minHeight: '44px', padding: '0 16px' }}>
                     <FiX style={{ marginRight: '5px' }} /> Cancelar
                   </button>
                   <button type="button" className="btn" onClick={confirmDelete} disabled={deleting} style={{

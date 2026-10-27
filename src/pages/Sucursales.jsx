@@ -29,6 +29,24 @@ function Sucursales() {
     checkAuth()
   }, [])
 
+  useEffect(() => {
+    if (!showModal && !showDeleteModal) return
+
+    const manejarEscape = (evento) => {
+      if (evento.key !== 'Escape') return
+      evento.preventDefault()
+      if (showDeleteModal && !deleting) {
+        setShowDeleteModal(false)
+        setSucursalAEliminar(null)
+      } else if (showModal && !saving) {
+        closeModal()
+      }
+    }
+
+    window.addEventListener('keydown', manejarEscape)
+    return () => window.removeEventListener('keydown', manejarEscape)
+  }, [showModal, showDeleteModal, deleting, saving])
+
   const checkAuth = async () => {
     try {
       const response = await api.get('/api/auth/me')
@@ -82,11 +100,18 @@ function Sucursales() {
     setShowModal(true)
   }
 
-  const closeModal = () => {
+  const closeModal = (forzar = false) => {
+    if (saving && !forzar) return
     setShowModal(false)
     setSelectedSucursal(null)
     setErrorMessage('')
     setSaving(false)
+  }
+
+  const closeDeleteModal = () => {
+    if (deleting) return
+    setShowDeleteModal(false)
+    setSucursalAEliminar(null)
   }
 
   const handleSubmit = async (e) => {
@@ -114,7 +139,8 @@ function Sucursales() {
         setSuccessMessage(MENSAJES.SUCURSAL_ACTUALIZADA)
       }
 
-      closeModal()
+      setSaving(false)
+      closeModal(true)
       await loadSucursales()
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (err) {
@@ -346,7 +372,7 @@ function Sucursales() {
       {/* Modal Crear / Editar */}
       {showModal && (
         <>
-          <div onClick={closeModal} style={{
+          <div onClick={() => closeModal()} style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
             backgroundColor: sombras.backdrop, backdropFilter: 'blur(4px)', zIndex: 1040
           }} />
@@ -366,7 +392,7 @@ function Sucursales() {
                       {modalMode === 'crear' ? 'Crear Sucursal' : 'Editar Sucursal'}
                     </h5>
                   </div>
-                  <button type="button" onClick={closeModal} style={{
+                  <button type="button" onClick={() => closeModal()} disabled={saving} style={{
                     border: 'none', background: 'transparent', color: colores.textoSuave,
                     cursor: 'pointer', fontSize: '18px', padding: '4px'
                   }} aria-label="Cerrar">
@@ -419,7 +445,7 @@ function Sucursales() {
                     justifyContent: 'flex-end',
                     gap: '10px'
                   }}>
-                    <button type="button" className="btn" onClick={closeModal} style={{
+                    <button type="button" className="btn" onClick={() => closeModal()} disabled={saving} style={{
                       ...btnGhost, minHeight: '44px', padding: '0 16px'
                     }}>
                       <FiX style={{ marginRight: '5px' }} /> Cancelar
@@ -438,7 +464,7 @@ function Sucursales() {
       {/* Modal Confirmar Eliminación */}
       {showDeleteModal && sucursalAEliminar && (
         <>
-          <div onClick={() => setShowDeleteModal(false)} style={{
+          <div onClick={closeDeleteModal} style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
             backgroundColor: sombras.backdrop, backdropFilter: 'blur(4px)', zIndex: 1040
           }} />
@@ -470,7 +496,7 @@ function Sucursales() {
                   justifyContent: 'flex-end',
                   gap: '10px'
                 }}>
-                  <button type="button" className="btn" onClick={() => setShowDeleteModal(false)} style={{
+                  <button type="button" className="btn" onClick={closeDeleteModal} disabled={deleting} style={{
                     ...btnGhost, minHeight: '44px', padding: '0 16px'
                   }}>
                     <FiX style={{ marginRight: '5px' }} /> Cancelar

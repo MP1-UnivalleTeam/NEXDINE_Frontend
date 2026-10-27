@@ -70,6 +70,7 @@ function Menu() {
 
   // RF031 — Sucursales del restaurante (solo menú público con varias sucursales)
   const [sucursalesDisponibles, setSucursalesDisponibles] = useState([])
+  const [errorSucursalMenu, setErrorSucursalMenu] = useState('')
 
   // Carrito
   const {
@@ -102,9 +103,24 @@ function Menu() {
   /**
    * Menú público por slug. NO crea sesión, NO usa sessionStorage.
    */
-  const cargarMenuPublico = async () => {
+  const cargarMenuPublico = async (sucursalId = undefined) => {
+    setLoading(true)
     try {
-      const response = await api.get(`/api/menu/${slug}`)
+      let response = await api.get(`/api/menu/${slug}`)
+      const sucursales = response.data.sucursales || []
+      const sucursalActual = sucursalId === undefined ? sucursal?.id : sucursalId
+      const sucursalValida = sucursales.some(
+        item => String(item.id) === String(sucursalActual)
+      )
+
+      if (sucursalActual && sucursalValida) {
+        response = await api.get(`/api/menu/${slug}`, {
+          params: { sucursalId: sucursalActual }
+        })
+      } else if (sucursal?.id && !sucursalValida) {
+        setSucursal(null)
+      }
+
       setCategorias(response.data.menu || [])
       setNombreRestaurante(response.data.restaurante || '')
       aplicarContextoSucursal(response.data)
@@ -135,6 +151,9 @@ function Menu() {
 
   const hayFiltroActivo = Boolean(textoBusqueda.trim() || categoriaFiltro)
   const totalVisibles = contarProductos(menuFiltrado)
+  const requiereSeleccionSucursal = (
+    esMenuPublico && sucursalesDisponibles.length > 1 && !sucursal?.id
+  )
 
   const aplicarBusqueda = ({ texto, categoriaId }) => {
     setTextoBusqueda(texto ?? '')
@@ -186,7 +205,9 @@ function Menu() {
   const actualizarMenuEnSegundoPlano = async () => {
     try {
       if (esMenuPublico) {
-        const response = await api.get(`/api/menu/${slug}`)
+        const response = await api.get(`/api/menu/${slug}`, {
+          params: sucursal?.id ? { sucursalId: sucursal.id } : undefined
+        })
         const nuevos = response.data.menu || []
         setCategorias(prev => (menuSinCambios(prev, nuevos) ? prev : nuevos))
         setNombreRestaurante(prev =>
@@ -273,7 +294,7 @@ function Menu() {
   useEffect(() => {
     const intervalo = setInterval(actualizarMenuEnSegundoPlano, INTERVALO_MENU_MS)
     return () => clearInterval(intervalo)
-  }, [esMenuPublico, slug])
+  }, [esMenuPublico, slug, sucursal?.id])
 
   // Polling de revalidación de sesión cada 60s; se limpia al desmontar.
   useEffect(() => {
@@ -295,7 +316,14 @@ function Menu() {
     }
     document.addEventListener('visibilitychange', alCambiarVisibilidad)
     return () => document.removeEventListener('visibilitychange', alCambiarVisibilidad)
-  }, [esMenuPublico, slug])
+  }, [esMenuPublico, slug, sucursal?.id])
+
+  const cambiarSucursalPublica = (nuevaSucursal) => {
+    setSucursal(nuevaSucursal)
+    setErrorSucursalMenu('')
+    setError('')
+    cargarMenuPublico(nuevaSucursal?.id ?? null)
+  }
 
   /**
    * Carga el menú validando el QR contra el backend.
@@ -350,6 +378,10 @@ function Menu() {
   // RF020 — El modal solo se usa si el producto tiene grupos de opciones
   // configurados; si no, el producto se agrega directamente al carrito.
   const manejarClickProducto = (item) => {
+    if (requiereSeleccionSucursal) {
+      setErrorSucursalMenu('Selecciona una sucursal para consultar la disponibilidad de sus productos.')
+      return
+    }
     if (!item?.disponible) return
     if (item.tieneOpciones) {
       setProductoParaPersonalizar(item)
@@ -481,8 +513,17 @@ function Menu() {
             <SelectorSucursal
               sucursales={sucursalesDisponibles}
               seleccionada={sucursal}
-              onSeleccionar={setSucursal}
+              onSeleccionar={cambiarSucursalPublica}
             />
+          )}
+          {requiereSeleccionSucursal && (
+            <div role="status" style={{
+              ...tarjeta, padding: '12px 16px', marginBottom: '16px',
+              color: colores.advertenciaTexto, backgroundColor: colores.advertenciaFondo,
+              fontSize: '13px'
+            }}>
+              {errorSucursalMenu || 'Selecciona una sucursal para ver los productos disponibles y agregarlos al pedido.'}
+            </div>
           )}
 
           {/* RF019 — Búsqueda de productos */}
@@ -610,6 +651,7 @@ function Menu() {
                                 type="button"
                                 className="btn w-100"
                                 onClick={(e) => { e.stopPropagation(); manejarClickProducto(item) }}
+                                disabled={requiereSeleccionSucursal}
                                 style={{
                                   ...btnPrimario,
                                   minHeight: '44px',

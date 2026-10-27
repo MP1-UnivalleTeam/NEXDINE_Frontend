@@ -30,6 +30,20 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
     cargarOpciones()
   }, [producto?.id])
 
+  useEffect(() => {
+    if (!producto) return
+
+    const manejarEscape = (evento) => {
+      if (evento.key === 'Escape') {
+        evento.preventDefault()
+        onCerrar()
+      }
+    }
+
+    window.addEventListener('keydown', manejarEscape)
+    return () => window.removeEventListener('keydown', manejarEscape)
+  }, [producto, onCerrar])
+
   const cargarOpciones = async () => {
     try {
       const data = await obtenerOpcionesProducto(producto.id)
