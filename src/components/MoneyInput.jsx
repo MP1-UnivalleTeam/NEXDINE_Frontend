@@ -4,7 +4,7 @@ const formatearInputMoneda = (valor) => {
   return sinFormato.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 }
 
-export default function MoneyInput({ value, onChange, name, placeholder = '$', style, className, inputMode = 'numeric', ...props }) {
+export default function MoneyInput({ value, onChange, name, placeholder = '', style, className, inputMode = 'numeric', ...props }) {
   const valorVisual = formatearInputMoneda(value)
 
   const manejarCambio = (evento) => {
