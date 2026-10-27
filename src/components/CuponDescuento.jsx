@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FiTag, FiX, FiCheck } from 'react-icons/fi'
 import { validarCupon } from '../services/pedidos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
+import { formatearDinero } from '../utils/dinero.js'
 
 /**
  * RF036 — Aplicar cupón de descuento.
@@ -16,7 +17,11 @@ function CuponDescuento() {
   const [codigo, setCodigo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const { cupon, aplicarCupon, quitarCupon } = useCarrito()
+  const { cupon, aplicarCupon, quitarCupon, subtotal } = useCarrito()
+
+  const montoMinimoNoAlcanzado = Boolean(
+    cupon?.montoMinimo && Number(cupon.montoMinimo) > subtotal
+  )
 
   const handleAplicar = async () => {
     if (!codigo.trim()) {
@@ -28,8 +33,14 @@ function CuponDescuento() {
     setError('')
 
     try {
-      await validarCupon(codigo.trim())
-      aplicarCupon(codigo.trim())
+      const data = await validarCupon(codigo.trim(), subtotal)
+      aplicarCupon({
+        codigo: data.codigo || codigo.trim().toUpperCase(),
+        tipo: data.tipo,
+        valor: data.valor,
+        montoMinimo: data.montoMinimo,
+        descuento: data.descuento
+      })
       setCodigo('')
     } catch (err) {
       setError(err.response?.data?.error || 'Cupón inválido o expirado')
@@ -52,24 +63,32 @@ function CuponDescuento() {
         </h6>
 
         {cupon ? (
-          <div className="d-flex align-items-center justify-content-between p-2 bg-success-subtle rounded">
-            <div>
-              <span className="badge bg-success me-2">
-                <FiCheck style={{ marginRight: '4px' }} />{cupon.codigo}
-              </span>
-              <small className="text-muted">
-                {cupon.descuento > 0
-                  ? `Descuento: $${cupon.descuento.toLocaleString('es-CO')}`
-                  : 'Cupón aplicado'}
-              </small>
+          <div className="p-2 bg-success-subtle rounded">
+            <div className="d-flex align-items-center justify-content-between">
+              <div>
+                <span className="badge bg-success me-2">
+                  <FiCheck style={{ marginRight: '4px' }} />{cupon.codigo}
+                </span>
+                <small className="text-muted">
+                  {cupon.descuento > 0
+                    ? `Descuento: ${formatearDinero(cupon.descuento)}`
+                    : 'Cupón aplicado'}
+                </small>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger"
+                onClick={handleRetirar}
+              >
+                <FiX style={{ marginRight: '4px' }} /> Retirar
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-danger"
-              onClick={handleRetirar}
-            >
-              <FiX style={{ marginRight: '4px' }} /> Retirar
-            </button>
+            {montoMinimoNoAlcanzado && (
+              <small className="text-danger d-block mt-2">
+                <i className="fa-solid fa-circle-exclamation me-1"></i>
+                El subtotal mínimo para este cupón es {formatearDinero(cupon.montoMinimo)}.
+              </small>
+            )}
           </div>
         ) : (
           <>

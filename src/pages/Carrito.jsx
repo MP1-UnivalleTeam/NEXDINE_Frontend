@@ -18,10 +18,8 @@ function Carrito() {
   const navigate = useNavigate()
   const {
     items, quitarItem, vaciarCarrito,
-    subtotal, propina, totalItems
+    subtotal, descuento, impuestos, propina, total, cupon, sucursal, totalItems
   } = useCarrito()
-
-  const total = subtotal + propina.valor
 
   if (items.length === 0) {
     return (
@@ -131,6 +129,7 @@ function Carrito() {
           {items.length > 0 && (
             <Sugerencias
               productoActual={items[items.length - 1].producto}
+              excluir={items.map(item => item.producto?.id).filter(Boolean)}
               onAgregar={() => {}}
             />
           )}
@@ -145,14 +144,31 @@ function Carrito() {
             <div className="card" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
               <div className="card-body">
                 <h6 className="mb-3">Resumen</h6>
+                {sucursal?.nombre ? (
+                  <small className="text-muted d-block mb-2">
+                    <i className="fa-solid fa-location-dot me-1"></i>
+                    Pedidos para: {sucursal.nombre}
+                  </small>
+                ) : (
+                  <small className="text-warning d-block mb-2">
+                    <i className="fa-solid fa-location-dot me-1"></i>
+                    Sin sucursal: se solicitará una antes de confirmar el pedido.
+                  </small>
+                )}
                 <div className="d-flex justify-content-between mb-2">
                   <span className="text-muted">Subtotal</span>
                   <span>${subtotal.toLocaleString('es-CO')}</span>
                 </div>
-                {cupon && (
+                {descuento > 0 && (
                   <div className="d-flex justify-content-between mb-2 text-success">
-                    <span>Descuento ({cupon.codigo})</span>
-                    <span>-${(cupon.descuento || 0).toLocaleString('es-CO')}</span>
+                    <span>Descuento {cupon?.codigo ? `(${cupon.codigo})` : ''}</span>
+                    <span>-${descuento.toLocaleString('es-CO')}</span>
+                  </div>
+                )}
+                {impuestos > 0 && (
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="text-muted">Impuestos</span>
+                    <span>${impuestos.toLocaleString('es-CO')}</span>
                   </div>
                 )}
                 {propina.valor > 0 && (

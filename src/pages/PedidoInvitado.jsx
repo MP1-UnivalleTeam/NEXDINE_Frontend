@@ -4,6 +4,11 @@ import { FiArrowLeft, FiUser, FiMapPin, FiPhone } from 'react-icons/fi'
 import { crearPedidoInvitado, agregarItemPedido, confirmarPedido } from '../services/pedidos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { obtenerMensajeError } from '../services/mensajes.js'
+import SelectorSucursal from '../components/SelectorSucursal.jsx'
+import {
+  obtenerSucursalesDisponibles,
+  obtenerContextoMenu
+} from '../utils/contextoMenu.js'
 
 /**
  * RF031 — Pedido como invitado.
@@ -17,7 +22,11 @@ import { obtenerMensajeError } from '../services/mensajes.js'
  */
 function PedidoInvitado() {
   const navigate = useNavigate()
-  const { items, subtotal, propina, cupon, vaciarCarrito } = useCarrito()
+  const {
+    items, subtotal, descuento, impuestos, propina, cupon, total,
+    sucursal, setSucursal, vaciarCarrito
+  } = useCarrito()
+  const [sucursalesDisponibles] = useState(() => obtenerSucursalesDisponibles())
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -51,6 +60,10 @@ function PedidoInvitado() {
       setError('La dirección es obligatoria para domicilio')
       return
     }
+    if (!sucursal?.id) {
+      setError('Debe seleccionar una sucursal antes de confirmar el pedido.')
+      return
+    }
 
     setLoading(true)
     try {
@@ -59,7 +72,8 @@ function PedidoInvitado() {
         telefono: formData.telefono.trim(),
         tipoServicio: formData.tipoServicio,
         direccion: formData.direccion.trim(),
-        referencia: formData.referencia.trim()
+        referencia: formData.referencia.trim(),
+        sucursalId: sucursal.id
       })
 
       // Agregar items al pedido
@@ -100,13 +114,21 @@ function PedidoInvitado() {
                 <p className="text-muted small">
                   Guarda este número para hacer seguimiento a tu pedido.
                 </p>
-                <button
-                  className="btn"
-                  style={{ backgroundColor: '#1a3c34', color: 'white' }}
-                  onClick={() => navigate('/menu')}
-                >
-                  Volver al menú
-                </button>
+                <div className="d-grid gap-2 mt-3">
+                  <button
+                    className="btn"
+                    style={{ backgroundColor: '#1a3c34', color: 'white' }}
+                    onClick={() => navigate(`/resumen/${pedidoConfirmado.id}`)}
+                  >
+                    Ver resumen del pedido
+                  </button>
+                  <button
+                    className="btn btn-outline-secondary"
+                    onClick={() => navigate(obtenerContextoMenu() || '/menu')}
+                  >
+                    Volver al menú
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -291,6 +313,31 @@ function PedidoInvitado() {
           <div className="card sticky-top" style={{ top: '20px', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
             <div className="card-body">
               <h6 className="mb-3">Resumen del pedido</h6>
+              {(!sucursal || !sucursal.id) && (
+                <>
+                  {sucursalesDisponibles.length > 0 ? (
+                    <SelectorSucursal
+                      sucursales={sucursalesDisponibles}
+                      seleccionada={sucursal}
+                      onSeleccionar={setSucursal}
+                    />
+                  ) : (
+                    <div className="alert alert-warning py-2 small" role="alert">
+                      <i className="fa-solid fa-location-dot me-1"></i>
+                      Ingrese al menú por el código QR de su mesa o mediante el
+                      enlace público del restaurante para asociar una sucursal
+                      válida a su pedido.
+                    </div>
+                  )}
+                </>
+              )}
+              {sucursal?.nombre && (
+                <small className="text-muted d-block mb-2">
+                  <i className="fa-solid fa-location-dot me-1"></i>
+                  {sucursal.nombre}
+                  {sucursal.direccion ? ` · ${sucursal.direccion}` : ''}
+                </small>
+              )}
               {items.map(item => (
                 <div key={item.key} className="d-flex justify-content-between mb-2 small">
                   <span className="text-muted">
@@ -306,10 +353,16 @@ function PedidoInvitado() {
                 <span className="text-muted">Subtotal</span>
                 <span>${subtotal.toLocaleString('es-CO')}</span>
               </div>
-              {cupon && (
+              {descuento > 0 && (
                 <div className="d-flex justify-content-between mt-1 text-success">
-                  <span>Descuento ({cupon.codigo})</span>
-                  <span>-${(cupon.descuento || 0).toLocaleString('es-CO')}</span>
+                  <span>Descuento {cupon?.codigo ? `(${cupon.codigo})` : ''}</span>
+                  <span>-${descuento.toLocaleString('es-CO')}</span>
+                </div>
+              )}
+              {impuestos > 0 && (
+                <div className="d-flex justify-content-between mt-1">
+                  <span className="text-muted">Impuestos</span>
+                  <span>${impuestos.toLocaleString('es-CO')}</span>
                 </div>
               )}
               {propina.valor > 0 && (
@@ -322,7 +375,7 @@ function PedidoInvitado() {
               <div className="d-flex justify-content-between">
                 <strong>Total</strong>
                 <strong style={{ color: '#1a3c34' }}>
-                  ${(subtotal + propina.valor - (cupon?.descuento || 0)).toLocaleString('es-CO')}
+                  ${total.toLocaleString('es-CO')}
                 </strong>
               </div>
             </div>

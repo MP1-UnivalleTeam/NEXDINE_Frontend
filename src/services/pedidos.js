@@ -13,6 +13,7 @@ export async function crearPedidoInvitado(datos) {
   params.append('tipoServicio', datos.tipoServicio)
   if (datos.direccion) params.append('direccion', datos.direccion)
   if (datos.referencia) params.append('referencia', datos.referencia)
+  if (datos.sucursalId) params.append('sucursalId', datos.sucursalId)
 
   const response = await api.post('/api/pedidos/invitado', params)
   return response.data
@@ -25,6 +26,7 @@ export async function agregarItemPedido(pedidoId, item) {
   if (item.opciones?.length) {
     item.opciones.forEach(o => params.append('opcionIds', o.id))
   }
+  if (item.observaciones) params.append('observaciones', item.observaciones)
 
   const response = await api.post(`/api/pedidos/${pedidoId}/items`, params)
   return response.data
@@ -37,8 +39,11 @@ export async function obtenerResumenPedido(pedidoId) {
 
 export async function confirmarPedido(pedidoId, { propina, cuponCodigo }) {
   const params = new URLSearchParams()
-  if (propina?.valor > 0) {
-    params.append('propinaTipo', propina.tipo)
+  if (propina?.tipo === 'porcentaje' && Number(propina.porcentaje) > 0) {
+    params.append('propinaTipo', 'PORCENTAJE')
+    params.append('propinaPorcentaje', propina.porcentaje)
+  } else if (Number(propina?.valor) > 0) {
+    params.append('propinaTipo', 'PERSONALIZADA')
     params.append('propinaValor', propina.valor)
   }
   if (cuponCodigo) params.append('cuponCodigo', cuponCodigo)
@@ -52,12 +57,18 @@ export async function obtenerOpcionesProducto(productoId) {
   return response.data
 }
 
-export async function obtenerSugerencias(productoId) {
-  const response = await api.get(`/api/sugerencias?productoId=${productoId}`)
+export async function obtenerSugerencias(productoId, { sucursalId, excluir = [] } = {}) {
+  const params = new URLSearchParams()
+  params.append('productoId', productoId)
+  if (sucursalId) params.append('sucursalId', sucursalId)
+  excluir.filter(Boolean).forEach(id => params.append('excluir', id))
+  const response = await api.get(`/api/sugerencias?${params.toString()}`)
   return response.data
 }
 
-export async function validarCupon(codigo) {
-  const response = await api.post('/api/cupones/validar', new URLSearchParams({ codigo }))
+export async function validarCupon(codigo, subtotal) {
+  const params = new URLSearchParams({ codigo })
+  if (subtotal != null) params.append('subtotal', subtotal)
+  const response = await api.post('/api/cupones/validar', params)
   return response.data
 }

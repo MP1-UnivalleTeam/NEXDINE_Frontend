@@ -4,9 +4,14 @@ import { FiShoppingCart } from 'react-icons/fi'
 import api from '../services/api.js'
 import BuscadorProductos from '../components/BuscadorProductos.jsx'
 import SelectorTipoServicio, { TIPOS_SERVICIO } from '../components/SelectorTipoServicio.jsx'
+import SelectorSucursal from '../components/SelectorSucursal.jsx'
 import ModalPersonalizacion from '../components/ModalPersonalizacion.jsx'
 import Sugerencias from '../components/Sugerencias.jsx'
 import { filtrarMenu, contarProductos } from '../utils/buscadorProductos.js'
+import {
+  guardarContextoMenu,
+  guardarSucursalesDisponibles
+} from '../utils/contextoMenu.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 
 const CLAVE_TOKEN = 'sessionToken'
@@ -58,8 +63,13 @@ function Menu() {
   // RF020 — Modal de personalización
   const [productoParaPersonalizar, setProductoParaPersonalizar] = useState(null)
 
+  // RF031 — Sucursales del restaurante (solo menú público con varias sucursales)
+  const [sucursalesDisponibles, setSucursalesDisponibles] = useState([])
+
   // Carrito
-  const { agregarItem, totalItems } = useCarrito()
+  const {
+    agregarItem, totalItems, setSucursal, setTasaImpuesto, sucursal
+  } = useCarrito()
 
   useEffect(() => {
     if (esMenuPublico) {
@@ -76,6 +86,14 @@ function Menu() {
     cargarMenu()
   }, [codigoMesa, slug])
 
+  // RF031 / RF052 — Contexto de navegación para "Volver al menú"
+  useEffect(() => {
+    const ruta = esMenuPublico
+      ? `/menu/${slug}`
+      : `/menu?mesa=${encodeURIComponent(codigoMesa)}`
+    guardarContextoMenu(ruta)
+  }, [esMenuPublico, slug, codigoMesa])
+
   /**
    * Menú público por slug. NO crea sesión, NO usa sessionStorage.
    */
@@ -84,6 +102,9 @@ function Menu() {
       const response = await api.get(`/api/menu/${slug}`)
       setCategorias(response.data.menu || [])
       setNombreRestaurante(response.data.restaurante || '')
+      aplicarContextoSucursal(response.data)
+      guardarSucursalesDisponibles(response.data.sucursales || [])
+      setSucursalesDisponibles(response.data.sucursales || [])
       setError('')
     } catch (err) {
       if (err.response && err.response.status === 404) {
@@ -166,9 +187,11 @@ function Menu() {
         setNombreRestaurante(prev =>
           response.data.restaurante || prev
         )
+        aplicarContextoSucursal(response.data)
         return
       }
 
+      // QR → mantener la sucursal/tasa del contexto de mesa
       const token = sessionStorage.getItem(CLAVE_TOKEN)
       if (!token) return
 
@@ -177,6 +200,7 @@ function Menu() {
       const nuevos = response.data.menu || []
       setCategorias(prev => (menuSinCambios(prev, nuevos) ? prev : nuevos))
       setNombreMesa(prev => response.data.mesa || prev)
+      aplicarContextoSucursal(response.data)
 
       // No se toca sessionToken ni mesaCodigo: la sesión no se renueva
     } catch (err) {
@@ -212,6 +236,30 @@ function Menu() {
         manejarSesionExpirada()
       }
       // Otros errores (red, 500) se ignoran: no invalidan la sesión
+    }
+  }
+
+  /**
+   * RF031 — Propaga el contexto de sucursal recibido del backend.
+   *
+   * · QR        → la mesa define la sucursal del pedido.
+   * · Público   → usa la sucursal si el restaurante tiene solo una.
+   *
+   * Cuando el restaurante tiene varias sucursales y no hay QR,
+   * `sucursalId` llega null y la selección queda explícita en la
+   * pantalla de pedido (no se inventa una sucursal).
+   */
+  const aplicarContextoSucursal = (datos) => {
+    if (!datos) return
+    if (datos.sucursalId) {
+      setSucursal({
+        id: datos.sucursalId,
+        nombre: datos.sucursalNombre || '',
+        direccion: ''
+      })
+    }
+    if (datos.tasaImpuesto != null) {
+      setTasaImpuesto(datos.tasaImpuesto)
     }
   }
 
@@ -261,6 +309,7 @@ function Menu() {
 
       setCategorias(response.data.menu || [])
       setNombreMesa(response.data.mesa || '')
+      aplicarContextoSucursal(response.data)
 
       // Token en sessionStorage: desaparece al cerrar la pestaña
       if (response.data.token) {
@@ -294,6 +343,17 @@ function Menu() {
     setSesionExpirada(true)
     setCategorias([])
     setLoading(false)
+  }
+
+  // RF020 — El modal solo se usa si el producto tiene grupos de opciones
+  // configurados; si no, el producto se agrega directamente al carrito.
+  const manejarClickProducto = (item) => {
+    if (!item?.disponible) return
+    if (item.tieneOpciones) {
+      setProductoParaPersonalizar(item)
+      return
+    }
+    agregarItem(item, [], 1)
   }
 
   if (loading) {
@@ -364,6 +424,16 @@ function Menu() {
         />
       )}
 
+      {/* RF031 — Selección explícita de sucursal en menú público
+          solo cuando el restaurante tiene varias activas. */}
+      {esMenuPublico && sucursalesDisponibles.length > 1 && (
+        <SelectorSucursal
+          sucursales={sucursalesDisponibles}
+          seleccionada={sucursal}
+          onSeleccionar={setSucursal}
+        />
+      )}
+
       {/* RF019 — Búsqueda de productos */}
       {categorias.length > 0 && (
         <BuscadorProductos
@@ -399,7 +469,7 @@ function Menu() {
                   <div
                     className="card h-100"
                     style={{ cursor: item.disponible ? 'pointer' : 'default' }}
-                    onClick={() => item.disponible && setProductoParaPersonalizar(item)}
+                    onClick={() => manejarClickProducto(item)}
                   >
                     {item.imagen ? (
                       <img src={item.imagen} className="card-img-top" alt={item.nombre}
@@ -421,7 +491,8 @@ function Menu() {
                       )}
                       {item.disponible && (
                         <span className="text-success small">
-                          <i className="fa-solid fa-plus me-1"></i>Clic para personalizar
+                          <i className="fa-solid fa-plus me-1"></i>
+                          {item.tieneOpciones ? 'Clic para personalizar' : 'Clic para agregar'}
                         </span>
                       )}
                     </div>

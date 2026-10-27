@@ -9,25 +9,28 @@ import Carrito from './pages/Carrito.jsx'
 import PedidoInvitado from './pages/PedidoInvitado.jsx'
 import ResumenPedido from './pages/ResumenPedido.jsx'
 import { CarritoProvider } from './context/CarritoContext.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 function App() {
   return (
     <BrowserRouter>
       <CarritoProvider>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/menu" element={<Menu />} />
-          <Route path="/menu/:slug" element={<Menu />} />
-          <Route path="/productos" element={<Productos />} />
-          <Route path="/mesas" element={<Mesas />} />
-          <Route path="/sucursales" element={<Sucursales />} />
-          <Route path="/carrito" element={<Carrito />} />
-          <Route path="/pedido" element={<PedidoInvitado />} />
-          <Route path="/resumen/:pedidoId" element={<ResumenPedido />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/menu" element={<Menu />} />
+            <Route path="/menu/:slug" element={<Menu />} />
+            <Route path="/productos" element={<Productos />} />
+            <Route path="/mesas" element={<Mesas />} />
+            <Route path="/sucursales" element={<Sucursales />} />
+            <Route path="/carrito" element={<Carrito />} />
+            <Route path="/pedido" element={<PedidoInvitado />} />
+            <Route path="/resumen/:pedidoId" element={<ResumenPedido />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </CarritoProvider>
     </BrowserRouter>
   )

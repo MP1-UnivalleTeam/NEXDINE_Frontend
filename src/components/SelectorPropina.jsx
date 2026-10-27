@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FiDollarSign } from 'react-icons/fi'
 import { useCarrito } from '../context/CarritoContext.jsx'
+import { formatearDinero, redondearDinero } from '../utils/dinero.js'
 
 /**
  * RF039 — Selector de propina.
@@ -14,22 +15,22 @@ import { useCarrito } from '../context/CarritoContext.jsx'
 const PORCENTAJES = [5, 10, 15]
 
 function SelectorPropina() {
-  const { propina, setPropina, subtotal } = useCarrito()
+  const { propina, setPropina, total } = useCarrito()
   const [valorCustom, setValorCustom] = useState('')
 
   const handlePorcentaje = (pct) => {
-    const valor = Math.round(subtotal * pct / 100)
-    setPropina({ tipo: 'porcentaje', porcentaje: pct, valor })
+    setPropina({ tipo: 'porcentaje', porcentaje: pct })
+    setValorCustom('')
   }
 
   const handleCustom = () => {
-    const valor = parseInt(valorCustom)
-    if (isNaN(valor) || valor < 0) return
-    setPropina({ tipo: 'personalizada', valor })
+    const valor = Number(valorCustom)
+    if (!Number.isFinite(valor) || valor < 0) return
+    setPropina({ tipo: 'personalizada', valor: redondearDinero(valor) })
   }
 
   const handleNinguna = () => {
-    setPropina({ tipo: 'ninguna', valor: 0 })
+    setPropina({ tipo: 'ninguna', valor: 0, porcentaje: 0 })
     setValorCustom('')
   }
 
@@ -84,10 +85,11 @@ function SelectorPropina() {
           <div className="d-flex justify-content-between align-items-center mt-2 p-2 bg-success-subtle rounded">
             <small className="text-success">
               <i className="fa-solid fa-check me-1"></i>
-              Propina: ${propina.valor.toLocaleString('es-CO')}
+              Propina: {formatearDinero(propina.valor)}
+              {propina.tipo === 'porcentaje' ? ` (${propina.porcentaje}%)` : ''}
             </small>
             <small className="text-muted">
-              Total: ${(subtotal + propina.valor).toLocaleString('es-CO')}
+              Total: {formatearDinero(total)}
             </small>
           </div>
         )}
