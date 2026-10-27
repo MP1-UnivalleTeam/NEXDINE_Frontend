@@ -11,6 +11,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Bootstrap disables pointer events on .modal-dialog; React cards replace .modal-content. */
+.modal-dialog > * {
+  pointer-events: auto;
+}
+
 /* Cifras tabulares para precios, totales y cantidades */
 .tnum {
   font-feature-settings: 'tnum' 1, 'cv05' 1;

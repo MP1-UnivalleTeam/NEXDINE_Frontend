@@ -243,7 +243,9 @@ function Mesas() {
 
   if (!currentUser) return null
 
-  const qrUrl = qrMesa ? `${window.location.origin}/menu?mesa=${qrMesa.codigo}` : ''
+  const qrUrl = qrMesa
+    ? `${window.location.origin}/menu?mesa=${encodeURIComponent(qrMesa.codigo)}`
+    : ''
   const mesasActivas = conteo('activas')
 
   return (
@@ -574,7 +576,7 @@ function Mesas() {
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
             backgroundColor: sombras.backdrop, backdropFilter: 'blur(4px)', zIndex: 1040
           }} />
-          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
+          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1" role="dialog" aria-modal="true" aria-labelledby="modal-create-table-title">
             <div className="modal-dialog modal-dialog-centered modal-sm" style={{ maxWidth: '420px' }}>
               <div style={{ ...tarjeta, boxShadow: sombras.nivel3, overflow: 'hidden' }}>
                 <div style={{ padding: '20px 24px 0 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -586,7 +588,7 @@ function Mesas() {
                     }}>
                       <FiPlus size={18} />
                     </div>
-                    <h5 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Crear Mesa</h5>
+                    <h5 id="modal-create-table-title" style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Crear Mesa</h5>
                   </div>
                   <button type="button" onClick={closeCreateModal} style={{
                     border: 'none', background: 'transparent', color: colores.textoSuave,
@@ -661,7 +663,7 @@ function Mesas() {
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
             backgroundColor: sombras.backdrop, backdropFilter: 'blur(4px)', zIndex: 1040
           }} />
-          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
+          <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1" role="dialog" aria-modal="true" aria-labelledby="modal-qr-title">
             <div className="modal-dialog modal-dialog-centered modal-sm" style={{ maxWidth: '420px' }}>
               <div style={{ ...tarjeta, boxShadow: sombras.nivel3, overflow: 'hidden' }}>
                 <div style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -673,7 +675,7 @@ function Mesas() {
                     }}>
                       <FiGrid size={18} />
                     </div>
-                    <h5 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>QR — {qrMesa.nombre}</h5>
+                    <h5 id="modal-qr-title" style={{ margin: 0, fontWeight: 700, color: colores.texto }}>QR — {qrMesa.nombre}</h5>
                   </div>
                   <button type="button" onClick={() => setQrMesa(null)} style={{
                     border: 'none', background: 'transparent', color: colores.textoSuave,
@@ -708,7 +710,8 @@ function Mesas() {
                   <a
                     className="btn"
                     style={{ ...btnPrimario, minHeight: '44px', padding: '0 16px', display: 'inline-flex', alignItems: 'center' }}
-                    href={qrUrl} target="_blank" rel="noreferrer"
+                    href={qrUrl} target="_blank" rel="noopener noreferrer"
+                    aria-label={`Abrir menú de ${qrMesa.nombre} en una pestaña nueva`}
                   >
                     Abrir enlace
                   </a>
