@@ -1,14 +1,14 @@
-import { formatearNumeroSinDecimales, normalizarValorMoneda } from '../utils/dinero.js'
+const formatearInputMoneda = (valor) => {
+  const sinFormato = String(valor ?? '').replace(/[^\d]/g, '')
+  if (!sinFormato) return ''
+  return sinFormato.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
 
-export default function MoneyInput({ value, onChange, name, placeholder = '0', style, className, inputMode = 'numeric', ...props }) {
-  const valorVisual = (() => {
-    const limpio = normalizarValorMoneda(value)
-    if (limpio === '') return '$'
-    return `$${formatearNumeroSinDecimales(limpio)}`
-  })()
+export default function MoneyInput({ value, onChange, name, placeholder = '$', style, className, inputMode = 'numeric', ...props }) {
+  const valorVisual = formatearInputMoneda(value)
 
   const manejarCambio = (evento) => {
-    const limpio = normalizarValorMoneda(evento.target.value)
+    const limpio = String(evento.target.value ?? '').replace(/[^\d]/g, '')
     if (onChange) {
       onChange({
         target: {
@@ -34,7 +34,7 @@ export default function MoneyInput({ value, onChange, name, placeholder = '0', s
           color: '#4b5563'
         }}
       >
-        $
+        $ 
       </span>
       <input
         {...props}
@@ -48,7 +48,7 @@ export default function MoneyInput({ value, onChange, name, placeholder = '0', s
         style={{
           ...style,
           width: '100%',
-          paddingLeft: '28px'
+          paddingLeft: '42px'
         }}
       />
     </div>
