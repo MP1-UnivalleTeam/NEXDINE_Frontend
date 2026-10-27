@@ -6,7 +6,9 @@
  *
  * Permisos:
  *   · ADMINISTRADOR / SUPERADMIN → Usuarios, Productos, Mesas, Pedidos, Reportes
- *   · CLIENTE                   → Ver Menú
+ *   · MESERO                    → Mesas, Pedidos
+ *   · COCINERO                  → Pedidos
+ *   · CLIENTE                   → Ver Menú, Mis Favoritos
  *
  * Visual: guía "Forest Culinary Precision" (DESIGN.md) — fondo verde bosque
  * #11362E, elemento activo con píldora clara y borde de resalte.
@@ -39,11 +41,25 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
   const esAdmin = currentUser.rol === 'ADMINISTRADOR' || currentUser.rol === 'SUPERADMIN'
   const esSuperadmin = currentUser.rol === 'SUPERADMIN'
   const esCliente = currentUser.rol === 'CLIENTE'
+  const esMesero = currentUser.rol === 'MESERO'
+  const esCocinero = currentUser.rol === 'COCINERO'
+
+  const etiquetasRol = {
+    SUPERADMIN: 'Admin General',
+    ADMINISTRADOR: 'Administrador',
+    MESERO: 'Mesero',
+    COCINERO: 'Cocinero',
+    CLIENTE: 'Cliente'
+  }
 
   const estilo = (ruta) => (rutaActual === ruta ? LINK_ACTIVO : LINK_BASE)
+  const contextoGuardado = obtenerContextoMenu()
+  const rutaMenu = contextoGuardado && !contextoGuardado.includes('mesa=null')
+    ? contextoGuardado
+    : null
 
   return (
-    <div style={{
+    <div className="nexdine-sidebar" style={{
       width: '260px',
       backgroundColor: colores.primario,
       color: 'white',
@@ -71,9 +87,49 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
 
       <ul className="nav flex-column mt-2" style={{ flex: 1 }}>
         {esCliente && (
+          <>
+            <li className="nav-item">
+              {rutaMenu ? (
+                <a href={rutaMenu} className="nav-link" style={estilo('/menu')}>
+                  <i className="fa-solid fa-utensils"></i> Ver Menú
+                </a>
+              ) : (
+                <span
+                  className="nav-link"
+                  style={{ ...LINK_BASE, opacity: 0.5, cursor: 'not-allowed' }}
+                  title="Escanea el código QR de tu mesa para abrir el menú"
+                >
+                  <i className="fa-solid fa-utensils"></i> Ver Menú
+                </span>
+              )}
+            </li>
+            <li className="nav-item">
+              <a href="/favoritos" className="nav-link" style={estilo('/favoritos')}>
+                <i className="fa-solid fa-heart"></i> Mis Favoritos
+              </a>
+            </li>
+          </>
+        )}
+
+        {esMesero && (
+          <>
+            <li className="nav-item">
+              <a href="/mesas" className="nav-link" style={estilo('/mesas')}>
+                <i className="fa-solid fa-chair"></i> Mesas
+              </a>
+            </li>
+            <li className="nav-item">
+              <a href="/pedidos" className="nav-link" style={estilo('/pedidos')}>
+                <i className="fa-solid fa-receipt"></i> Pedidos
+              </a>
+            </li>
+          </>
+        )}
+
+        {esCocinero && (
           <li className="nav-item">
-            <a href={obtenerContextoMenu() || '/menu'} className="nav-link" style={estilo('/menu')}>
-              <i className="fa-solid fa-utensils"></i> Ver Menú
+            <a href="/pedidos" className="nav-link" style={estilo('/pedidos')}>
+              <i className="fa-solid fa-receipt"></i> Pedidos
             </a>
           </li>
         )}
@@ -103,18 +159,18 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
               </li>
             )}
             <li className="nav-item">
+              <a href="/pedidos" className="nav-link" style={estilo('/pedidos')}>
+                <i className="fa-solid fa-receipt"></i> Pedidos
+              </a>
+            </li>
+            <li className="nav-item">
               <span
                 className="nav-link"
                 style={{ ...LINK_BASE, opacity: 0.5, cursor: 'not-allowed' }}
                 title="Próximamente"
               >
-                <i className="fa-solid fa-receipt"></i> Pedidos
-              </span>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" style={LINK_BASE}>
                 <i className="fa-solid fa-chart-line"></i> Reportes
-              </a>
+              </span>
             </li>
           </>
         )}
@@ -138,7 +194,7 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
             {currentUser.nombre}
           </div>
           <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
-            {currentUser.rol === 'SUPERADMIN' ? 'Admin General' : currentUser.rol === 'ADMINISTRADOR' ? 'Administrador' : 'Cliente'}
+            {etiquetasRol[currentUser.rol] || 'Usuario'}
           </div>
         </div>
         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: colores.exito, flexShrink: 0 }}></span>

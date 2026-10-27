@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
-import { FiShoppingCart, FiPlus, FiClock, FiArrowRight, FiAlertTriangle, FiSearch } from 'react-icons/fi'
+import { FiShoppingCart, FiPlus, FiClock, FiArrowRight, FiAlertTriangle, FiSearch, FiHeart } from 'react-icons/fi'
 import api from '../services/api.js'
+import { listarFavoritos, agregarFavorito, eliminarFavorito } from '../services/favoritos.js'
 import BuscadorProductos from '../components/BuscadorProductos.jsx'
 import SelectorTipoServicio, { TIPOS_SERVICIO } from '../components/SelectorTipoServicio.jsx'
 import SelectorSucursal from '../components/SelectorSucursal.jsx'
@@ -13,7 +14,7 @@ import {
   guardarSucursalesDisponibles
 } from '../utils/contextoMenu.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
-import { colores, sombras, radios, tarjeta, btnPrimario, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
+import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 
 const CLAVE_TOKEN = 'sessionToken'
 const CLAVE_MESA = 'mesaCodigo'
@@ -72,6 +73,13 @@ function Menu() {
   const [sucursalesDisponibles, setSucursalesDisponibles] = useState([])
   const [errorSucursalMenu, setErrorSucursalMenu] = useState('')
 
+  // Favoritos del cliente autenticado
+  const [usuario, setUsuario] = useState(null)
+  const [favoritos, setFavoritos] = useState(() => new Set())
+  const [favoritoEnCurso, setFavoritoEnCurso] = useState(() => new Set())
+  const [errorFavorito, setErrorFavorito] = useState('')
+  const esCliente = usuario?.rol === 'CLIENTE'
+
   // Carrito
   const {
     agregarItem, totalItems, subtotal, setSucursal, setTasaImpuesto, sucursal
@@ -85,19 +93,45 @@ function Menu() {
     }
 
     if (!codigoMesa) {
-      setError('No se recibió un código de mesa válido')
+      setError('Escanea el código QR de tu mesa para abrir el menú.')
       setLoading(false)
       return
     }
     cargarMenu()
   }, [codigoMesa, slug])
 
+  useEffect(() => {
+    let cancelado = false
+
+    api.get('/api/auth/me')
+      .then(async (response) => {
+        if (cancelado) return
+        const datos = response.data
+        setUsuario(datos)
+        if (datos?.rol !== 'CLIENTE') return
+
+        try {
+          const lista = await listarFavoritos()
+          if (cancelado) return
+          setFavoritos(new Set((Array.isArray(lista) ? lista : []).map(producto => producto.id)))
+        } catch {
+          if (!cancelado) setErrorFavorito('No fue posible cargar tus favoritos.')
+        }
+      })
+      .catch(() => {})
+
+    return () => { cancelado = true }
+  }, [])
+
   // RF031 / RF052 — Contexto de navegación para "Volver al menú"
   useEffect(() => {
-    const ruta = esMenuPublico
-      ? `/menu/${slug}`
-      : `/menu?mesa=${encodeURIComponent(codigoMesa)}`
-    guardarContextoMenu(ruta)
+    if (esMenuPublico) {
+      guardarContextoMenu(`/menu/${slug}`)
+      return
+    }
+    if (codigoMesa) {
+      guardarContextoMenu(`/menu?mesa=${encodeURIComponent(codigoMesa)}`)
+    }
   }, [esMenuPublico, slug, codigoMesa])
 
   /**
@@ -390,6 +424,36 @@ function Menu() {
     agregarItem(item, [], 1)
   }
 
+  const alternarFavorito = async (producto) => {
+    if (!esCliente || !producto?.id || favoritoEnCurso.has(producto.id)) return
+
+    const yaEsFavorito = favoritos.has(producto.id)
+    setFavoritoEnCurso(prev => new Set(prev).add(producto.id))
+    setErrorFavorito('')
+
+    try {
+      if (yaEsFavorito) {
+        await eliminarFavorito(producto.id)
+      } else {
+        await agregarFavorito(producto.id)
+      }
+      setFavoritos(prev => {
+        const siguiente = new Set(prev)
+        if (yaEsFavorito) siguiente.delete(producto.id)
+        else siguiente.add(producto.id)
+        return siguiente
+      })
+    } catch (err) {
+      setErrorFavorito(err.response?.data?.error || 'No fue posible actualizar tus favoritos.')
+    } finally {
+      setFavoritoEnCurso(prev => {
+        const siguiente = new Set(prev)
+        siguiente.delete(producto.id)
+        return siguiente
+      })
+    }
+  }
+
   if (loading) {
     return (
       <div style={{
@@ -451,7 +515,26 @@ function Menu() {
           <h5 style={{ fontWeight: 700, color: colores.texto, marginBottom: '8px' }}>
             {error === 'Menú no disponible' ? 'Menú no disponible' : 'No se pudo abrir el menú'}
           </h5>
-          <p style={{ color: colores.textoSuave, marginBottom: 0, fontSize: '14px' }}>{error}</p>
+          <p style={{ color: colores.textoSuave, marginBottom: '16px', fontSize: '14px' }}>{error}</p>
+          {esCliente ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => navigate('/favoritos')}
+              style={{ ...btnPrimario, minHeight: '42px' }}
+            >
+              <FiHeart style={{ marginRight: '6px' }} /> Ir a mis favoritos
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => navigate('/login')}
+              style={{ ...btnPrimario, minHeight: '42px' }}
+            >
+              Volver al inicio
+            </button>
+          )}
         </div>
       </div>
     )
@@ -476,7 +559,17 @@ function Menu() {
                 Explora la carta y agrega lo que te antoje
               </small>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              {esCliente && (
+                <button
+                  type="button"
+                  className="btn d-flex align-items-center"
+                  style={{ ...btnGhost, minHeight: '44px' }}
+                  onClick={() => navigate('/favoritos')}
+                >
+                  <FiHeart style={{ marginRight: '6px', color: colores.error }} /> Mis favoritos
+                </button>
+              )}
               {!esMenuPublico && (
                 <span style={estiloBadge(colores.exitoFondo, colores.exitoTexto)}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: colores.exito }} />
@@ -495,6 +588,16 @@ function Menu() {
               )}
             </div>
           </div>
+
+          {esCliente && errorFavorito && (
+            <div role="alert" style={{
+              ...tarjeta, padding: '10px 14px', marginBottom: '14px',
+              backgroundColor: colores.errorFondo, color: colores.errorTexto,
+              fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <FiAlertTriangle /> {errorFavorito}
+            </div>
+          )}
 
           {/* RF003 — Tipo de servicio.
               Solo tiene sentido en el enlace público: el QR ya representa una
@@ -612,6 +715,37 @@ function Menu() {
                             }}>
                               <i className="fa-solid fa-utensils" style={{ fontSize: '1.6rem', color: colores.textoSuaveClaro }}></i>
                             </div>
+                          )}
+                          {esCliente && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                alternarFavorito(item)
+                              }}
+                              onKeyDown={(e) => e.stopPropagation()}
+                              disabled={favoritoEnCurso.has(item.id)}
+                              aria-pressed={favoritos.has(item.id)}
+                              aria-label={favoritos.has(item.id)
+                                ? `Quitar ${item.nombre} de favoritos`
+                                : `Guardar ${item.nombre} en favoritos`}
+                              title={favoritos.has(item.id) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                              style={{
+                                position: 'absolute', top: '10px', left: '10px',
+                                width: '36px', height: '36px', borderRadius: '50%',
+                                border: `1px solid ${colores.borde}`,
+                                backgroundColor: 'rgba(255,255,255,0.94)',
+                                color: favoritos.has(item.id) ? colores.error : colores.textoSuave,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: favoritoEnCurso.has(item.id) ? 'wait' : 'pointer',
+                                boxShadow: sombras.nivel1
+                              }}
+                            >
+                              <FiHeart
+                                size={16}
+                                fill={favoritos.has(item.id) ? colores.error : 'none'}
+                              />
+                            </button>
                           )}
                           {!item.disponible && (
                             <span style={{

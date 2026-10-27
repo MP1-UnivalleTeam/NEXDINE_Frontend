@@ -9,10 +9,17 @@ function Login() {
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
+  const rutaInicio = (rol) => {
+    if (rol === 'CLIENTE') return '/favoritos'
+    if (rol === 'MESERO') return '/mesas'
+    if (rol === 'COCINERO') return '/pedidos'
+    return '/dashboard'
+  }
+
   useEffect(() => {
     // Verificar si ya hay sesión activa
     api.get('/api/auth/check')
-      .then(() => navigate('/dashboard'))
+      .then((response) => navigate(rutaInicio(response.data?.rol)))
       .catch(() => {})
   }, [navigate])
 
@@ -25,8 +32,8 @@ function Login() {
     params.append('contraseña', contraseña)
 
     try {
-      await api.post('/login', params)
-      navigate('/dashboard')
+      const response = await api.post('/login', params)
+      navigate(rutaInicio(response.data?.rol))
     } catch (err) {
       if (err.response) {
         if (err.response.status === 401) {

@@ -1,9 +1,17 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiPlus, FiX, FiCheckCircle, FiXCircle, FiGrid, FiLink2, FiCopy, FiExternalLink, FiSearch, FiLock } from 'react-icons/fi'
+import {
+  FiPlus, FiX, FiCheckCircle, FiXCircle, FiGrid, FiLink2, FiCopy, FiExternalLink,
+  FiSearch, FiLock, FiClipboard, FiRefreshCw, FiActivity
+} from 'react-icons/fi'
 import { QRCodeSVG } from 'qrcode.react'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import TarjetaPedido from '../components/TarjetaPedido.jsx'
+import ModalPedidoManual from '../components/ModalPedidoManual.jsx'
+import { usePedidosActivos } from '../hooks/usePedidosActivos.js'
+import { actualizarEstadoPedido } from '../services/pedidos.js'
+import { etiquetaEstado } from '../utils/pedidos.js'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, input } from '../styles/tokens.js'
 
 function Mesas() {
@@ -14,6 +22,18 @@ function Mesas() {
   const navigate = useNavigate()
 
   const esSuperadmin = currentUser?.rol === 'SUPERADMIN'
+  const esAdmin = currentUser?.rol === 'ADMINISTRADOR' || esSuperadmin
+  const esMesero = currentUser?.rol === 'MESERO'
+
+  const {
+    pedidos, cargando: cargandoPedidos, error: errorPedidos,
+    enTiempoReal, recargar: recargarPedidos
+  } = usePedidosActivos({ activo: Boolean(currentUser) })
+
+  // Mesa seleccionada para consultar y administrar sus órdenes activas.
+  const [mesaSeleccionada, setMesaSeleccionada] = useState(null)
+  const [modalPedidoManual, setModalPedidoManual] = useState(false)
+  const [pedidoActualizando, setPedidoActualizando] = useState(null)
 
   // Modal crear mesa
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -57,9 +77,24 @@ function Mesas() {
   const checkAuth = async () => {
     try {
       const response = await api.get('/api/auth/me')
-      setCurrentUser(response.data)
-      if (response.data.rol !== 'ADMINISTRADOR' && response.data.rol !== 'SUPERADMIN') {
-        navigate('/dashboard')
+      const usuario = response.data
+      const rol = usuario?.rol
+
+      if (rol !== 'ADMINISTRADOR' && rol !== 'SUPERADMIN' && rol !== 'MESERO') {
+        navigate(
+          rol === 'COCINERO'
+            ? '/pedidos'
+            : rol === 'CLIENTE'
+              ? '/menu'
+              : '/login'
+        )
+        return
+      }
+
+      setCurrentUser(usuario)
+
+      if (rol === 'MESERO') {
+        await loadMesas()
       } else {
         await Promise.all([loadMesas(), loadSucursales(), loadEnlacePublico()])
       }
@@ -124,6 +159,16 @@ function Mesas() {
       console.error('Error copiando enlace:', err)
     }
   }
+
+  useEffect(() => {
+    if (!mesaSeleccionada) return
+    const actualizada = mesas.find(mesa => mesa.id === mesaSeleccionada.id)
+    if (actualizada) {
+      if (actualizada !== mesaSeleccionada) setMesaSeleccionada(actualizada)
+    } else if (!loading) {
+      setMesaSeleccionada(null)
+    }
+  }, [mesas, loading, mesaSeleccionada])
 
   const handleLogout = async () => {
     try {
@@ -200,6 +245,46 @@ function Mesas() {
     }
   }
 
+  const seleccionarMesa = (mesa) => {
+    if (!mesa?.activa) return
+    setMesaSeleccionada(prev => (prev?.id === mesa.id ? null : mesa))
+    setErrorMessage('')
+  }
+
+  const pedidosMesa = useMemo(() => {
+    if (!mesaSeleccionada) return []
+    return pedidos.filter(pedido => pedido.mesaId === mesaSeleccionada.id)
+  }, [pedidos, mesaSeleccionada])
+
+  const cambiarEstadoPedido = async (pedido, estado) => {
+    if (pedidoActualizando) return
+    setPedidoActualizando(pedido.id)
+    setErrorMessage('')
+    try {
+      await actualizarEstadoPedido(pedido.id, estado)
+      const referencia = pedido.numeroSeguimiento || 'Pedido'
+      setSuccessMessage(`${referencia} actualizado a ${etiquetaEstado(estado).toLowerCase()}.`)
+      await recargarPedidos()
+      setTimeout(() => setSuccessMessage(''), 3500)
+    } catch (err) {
+      setErrorMessage(err.response?.data?.error || 'No fue posible actualizar el estado del pedido.')
+      setTimeout(() => setErrorMessage(''), 5000)
+    } finally {
+      setPedidoActualizando(null)
+    }
+  }
+
+  const pedidoManualCreado = async (pedido) => {
+    setModalPedidoManual(false)
+    setSuccessMessage(
+      pedido?.numeroSeguimiento
+        ? `Pedido ${pedido.numeroSeguimiento} registrado correctamente.`
+        : 'Pedido registrado correctamente.'
+    )
+    await recargarPedidos()
+    setTimeout(() => setSuccessMessage(''), 4000)
+  }
+
   const getSucursalNombre = (sucursalId) => {
     const s = sucursales.find(x => x.id === sucursalId)
     return s ? s.nombre : '—'
@@ -247,33 +332,43 @@ function Mesas() {
   const mesasActivas = conteo('activas')
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
+    <div className="nexdine-shell" style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
       {/* Sidebar compartido */}
       <Sidebar currentUser={currentUser} rutaActual="/mesas" onLogout={handleLogout} />
 
       {/* Main Content */}
-      <div style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
+      <div className="nexdine-main" style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
         {/* Encabezado */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
           <div>
-            <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Gestión de Mesas</h2>
+            <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>
+              {esAdmin ? 'Gestión de Mesas' : 'Mesas'}
+            </h2>
             <small style={{ color: colores.textoSuave }}>
-              {mesas.length > 0 ? `${mesasActivas} de ${mesas.length} mesas activas` : 'Sin mesas registradas'}
+              {mesas.length === 0
+                ? (esMesero ? 'Sin mesas activas asignadas' : 'Sin mesas registradas')
+                : esMesero
+                  ? `${mesas.length} mesas activas disponibles para atender`
+                  : `${mesasActivas} de ${mesas.length} mesas activas`}
             </small>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <button className="btn" style={{ ...btnPrimario, minHeight: '44px' }} onClick={openCreateModal}>
-              <FiPlus style={{ marginRight: '5px' }} /> Nueva Mesa
-            </button>
-            <button
-              className="btn"
-              style={{ ...btnGhost, minHeight: '44px' }}
-              onClick={() => navigate('/sucursales')}
-              title="Ir a la gestión de sucursales"
-              disabled={!esSuperadmin}
-            >
-              <FiLink2 style={{ marginRight: '5px' }} /> Sucursales
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+            {esAdmin && (
+              <>
+                <button className="btn" style={{ ...btnPrimario, minHeight: '44px' }} onClick={openCreateModal}>
+                  <FiPlus style={{ marginRight: '5px' }} /> Nueva Mesa
+                </button>
+                <button
+                  className="btn"
+                  style={{ ...btnGhost, minHeight: '44px' }}
+                  onClick={() => navigate('/sucursales')}
+                  title="Ir a la gestión de sucursales"
+                  disabled={!esSuperadmin}
+                >
+                  <FiLink2 style={{ marginRight: '5px' }} /> Sucursales
+                </button>
+              </>
+            )}
             <span className="text-muted">Hola, <strong>{currentUser.nombre}</strong></span>
             <img
               src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=11362E&color=fff`}
@@ -438,12 +533,141 @@ function Mesas() {
           </div>
         </div>
 
+        {mesaSeleccionada && (
+          <section id="panel-mesa" style={{
+            ...tarjeta,
+            padding: '20px',
+            marginBottom: '20px',
+            borderTop: `4px solid ${colores.primario}`
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap'
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <small style={{
+                  color: colores.textoSuave, fontWeight: 700, fontSize: '10.5px',
+                  textTransform: 'uppercase', letterSpacing: '0.05em'
+                }}>
+                  Mesa seleccionada
+                </small>
+                <h4 style={{ margin: '2px 0 3px', fontWeight: 700, color: colores.texto }}>
+                  {mesaSeleccionada.nombre}
+                </h4>
+                <small style={{ color: colores.textoSuave }}>
+                  <code style={{ fontSize: '11.5px' }}>{mesaSeleccionada.codigo}</code>
+                  {esAdmin ? ` · ${getSucursalNombre(mesaSeleccionada.sucursalId)}` : ''}
+                </small>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={estiloBadge(
+                  enTiempoReal ? colores.exitoFondo : colores.superficie,
+                  enTiempoReal ? colores.exitoTexto : colores.textoSuave
+                )}>
+                  <FiActivity size={12} /> {enTiempoReal ? 'En vivo' : 'Cada 15 s'}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={recargarPedidos}
+                  disabled={cargandoPedidos}
+                  style={{ ...btnGhost, minHeight: '40px' }}
+                >
+                  <FiRefreshCw style={{ marginRight: '5px' }} /> Actualizar
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setModalPedidoManual(true)}
+                  disabled={!mesaSeleccionada.activa}
+                  style={{ ...btnPrimario, minHeight: '40px' }}
+                >
+                  <FiClipboard style={{ marginRight: '5px' }} /> Registrar pedido manual
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setMesaSeleccionada(null)}
+                  aria-label="Cerrar mesa seleccionada"
+                  style={{ ...btnGhost, minHeight: '40px', padding: '0 12px' }}
+                >
+                  <FiX />
+                </button>
+              </div>
+            </div>
+
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              marginTop: '16px', marginBottom: '10px', flexWrap: 'wrap'
+            }}>
+              <strong style={{ color: colores.texto, fontSize: '14px' }}>Órdenes activas</strong>
+              <span style={estiloBadge(colores.superficie, colores.textoSuave)}>
+                {pedidosMesa.length}
+              </span>
+              <small style={{ color: colores.textoSuave, marginLeft: 'auto' }}>
+                {enTiempoReal
+                  ? 'Los cambios se reciben en tiempo real.'
+                  : 'La lista se sincroniza automáticamente cada 15 segundos.'}
+              </small>
+            </div>
+
+            {errorPedidos && (
+              <div role="alert" style={{
+                backgroundColor: colores.errorFondo, color: colores.errorTexto,
+                borderRadius: radios.sm, padding: '10px 12px', fontSize: '13px',
+                marginBottom: '10px', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', gap: '10px', flexWrap: 'wrap'
+              }}>
+                <span>{errorPedidos}</span>
+                <button type="button" className="btn" onClick={recargarPedidos} style={{ ...btnGhost, minHeight: '34px' }}>
+                  Reintentar
+                </button>
+              </div>
+            )}
+
+            {cargandoPedidos && pedidosMesa.length === 0 ? (
+              <div role="status" style={{ textAlign: 'center', padding: '24px 0', color: colores.textoSuave, fontSize: '13px' }}>
+                <div className="spinner-border spinner-border-sm" style={{ color: colores.primario }}></div>
+                <div style={{ marginTop: '8px' }}>Cargando órdenes de la mesa…</div>
+              </div>
+            ) : pedidosMesa.length === 0 ? (
+              <div style={{
+                backgroundColor: colores.superficie, borderRadius: radios.md,
+                padding: '18px', textAlign: 'center', color: colores.textoSuave, fontSize: '13px'
+              }}>
+                Esta mesa no tiene órdenes activas.
+              </div>
+            ) : (
+              <div className="row g-3">
+                {pedidosMesa.map(pedido => (
+                  <div key={pedido.id} className="col-12 col-xl-6">
+                    <TarjetaPedido
+                      pedido={pedido}
+                      nombreMesa={mesaSeleccionada.nombre}
+                      onCambiarEstado={cambiarEstadoPedido}
+                      actualizando={pedidoActualizando === pedido.id}
+                      permitirAcciones={esAdmin || esMesero}
+                      compacto
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Cuadrícula de tarjetas de mesa */}
         {mesas.length === 0 ? (
           <div style={{ ...tarjeta, padding: '56px 24px', textAlign: 'center', color: colores.textoSuave }}>
             <FiGrid className="mb-2" style={{ fontSize: '2rem', color: colores.textoSuaveClaro }} />
-            <div style={{ fontWeight: 600, color: colores.texto }}>No hay mesas registradas</div>
-            <small>Crea tu primera mesa con el botón "Nueva Mesa".</small>
+            <div style={{ fontWeight: 600, color: colores.texto }}>
+              {esMesero ? 'Sin mesas activas disponibles' : 'No hay mesas registradas'}
+            </div>
+            <small>
+              {esMesero
+                ? 'No hay mesas activas en tu sucursal en este momento.'
+                : 'Crea tu primera mesa con el botón "Nueva Mesa".'}
+            </small>
           </div>
         ) : mesasFiltradas.length === 0 ? (
           <div style={{ ...tarjeta, padding: '56px 24px', textAlign: 'center', color: colores.textoSuave }}>
@@ -455,7 +679,16 @@ function Mesas() {
           <div className="row g-3">
             {mesasFiltradas.map(mesa => (
               <div key={mesa.id} className="col-12 col-md-6 col-xl-4">
-                <div style={{ ...tarjeta, padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{
+                  ...tarjeta,
+                  padding: '20px',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  border: mesaSeleccionada?.id === mesa.id
+                    ? `2px solid ${colores.primario}`
+                    : tarjeta.border
+                }}>
                   {/* Encabezado de tarjeta */}
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '14px' }}>
                     <div style={{
@@ -472,7 +705,7 @@ function Mesas() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, color: colores.texto, fontSize: '15px' }}>{mesa.nombre}</div>
                       <small style={{ color: colores.textoSuave }}>
-                        {getSucursalNombre(mesa.sucursalId)}
+                        {esAdmin ? getSucursalNombre(mesa.sucursalId) : 'Disponible para atender'}
                       </small>
                     </div>
                     {mesa.activa ? (
@@ -509,6 +742,12 @@ function Mesas() {
                         <FiCheckCircle size={13} /> Habilitado
                       </span>
                     </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                      <span style={{ color: colores.textoSuave }}>Órdenes activas</span>
+                      <span style={{ color: colores.texto, fontWeight: 600 }}>
+                        {pedidos.filter(pedido => pedido.mesaId === mesa.id).length}
+                      </span>
+                    </div>
                     {!mesa.activa && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ color: colores.textoSuave }}>Estado</span>
@@ -522,43 +761,63 @@ function Mesas() {
                     )}
                   </div>
 
-                  {/* Acciones: el QR permanece disponible bajo demanda */}
-                  <div className="row g-2 mt-3">
-                    <div className="col-6">
-                      <button
-                        className="btn w-100"
-                        title="Generar QR"
-                        disabled={!mesa.activa}
-                        onClick={() => setQrMesa(mesa)}
-                        style={{
-                          ...btnGhost,
-                          minHeight: '44px',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                          opacity: mesa.activa ? 1 : 0.5,
-                          cursor: mesa.activa ? 'pointer' : 'not-allowed'
-                        }}
-                      >
-                        <FiGrid /> Ver QR
-                      </button>
-                    </div>
-                    <div className="col-6">
-                      <button
-                        className="btn w-100"
-                        title={mesa.activa ? 'Desactivar mesa' : 'Activar mesa'}
-                        onClick={() => handleToggleEstado(mesa)}
-                        style={{
-                          ...btnPrimario,
-                          minHeight: '44px',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                          backgroundColor: mesa.activa ? colores.tarjeta : colores.primario,
-                          color: mesa.activa ? colores.primario : 'white',
-                          border: `1px solid ${colores.borde}`
-                        }}
-                      >
-                        {mesa.activa ? <FiXCircle /> : <FiCheckCircle />}
-                        {mesa.activa ? 'Desactivar' : 'Activar'}
-                      </button>
-                    </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                    <button
+                      type="button"
+                      className="btn w-100"
+                      disabled={!mesa.activa}
+                      onClick={() => seleccionarMesa(mesa)}
+                      style={{
+                        ...(mesaSeleccionada?.id === mesa.id ? btnGhost : btnPrimario),
+                        minHeight: '44px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        opacity: mesa.activa ? 1 : 0.5,
+                        cursor: mesa.activa ? 'pointer' : 'not-allowed'
+                      }}
+                    >
+                      <FiClipboard />
+                      {mesaSeleccionada?.id === mesa.id ? 'Ocultar órdenes' : 'Ver órdenes'}
+                    </button>
+
+                    {esAdmin && (
+                      <div className="row g-2">
+                        <div className="col-6">
+                          <button
+                            className="btn w-100"
+                            title="Generar QR"
+                            disabled={!mesa.activa}
+                            onClick={() => setQrMesa(mesa)}
+                            style={{
+                              ...btnGhost,
+                              minHeight: '44px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                              opacity: mesa.activa ? 1 : 0.5,
+                              cursor: mesa.activa ? 'pointer' : 'not-allowed'
+                            }}
+                          >
+                            <FiGrid /> Ver QR
+                          </button>
+                        </div>
+                        <div className="col-6">
+                          <button
+                            className="btn w-100"
+                            title={mesa.activa ? 'Desactivar mesa' : 'Activar mesa'}
+                            onClick={() => handleToggleEstado(mesa)}
+                            style={{
+                              ...btnPrimario,
+                              minHeight: '44px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                              backgroundColor: mesa.activa ? colores.tarjeta : colores.primario,
+                              color: mesa.activa ? colores.primario : 'white',
+                              border: `1px solid ${colores.borde}`
+                            }}
+                          >
+                            {mesa.activa ? <FiXCircle /> : <FiCheckCircle />}
+                            {mesa.activa ? 'Desactivar' : 'Activar'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -717,6 +976,14 @@ function Mesas() {
             </div>
           </div>
         </>
+      )}
+
+      {modalPedidoManual && mesaSeleccionada && (
+        <ModalPedidoManual
+          mesa={mesaSeleccionada}
+          onCerrar={() => setModalPedidoManual(false)}
+          onCreado={pedidoManualCreado}
+        />
       )}
     </div>
   )
