@@ -72,3 +72,25 @@ export async function validarCupon(codigo, subtotal) {
   const response = await api.post('/api/cupones/validar', params)
   return response.data
 }
+
+export async function listarPedidosActivos() {
+  const response = await api.get('/api/pedidos/activos')
+  return response.data
+}
+
+export async function registrarPedidoManual(datos) {
+  const response = await api.post('/api/pedidos/manual', datos)
+  return response.data
+}
+
+export async function actualizarEstadoPedido(pedidoId, estado) {
+  const response = await api.put(`/api/pedidos/${pedidoId}/estado`, null, {
+    params: { estado }
+  })
+  return response.data
+}
+
+export async function obtenerMenuPorMesa(codigoMesa) {
+  const response = await api.get('/api/menu', { params: { mesa: codigoMesa } })
+  return response.data
+}

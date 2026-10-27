@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FiArrowLeft, FiPackage } from 'react-icons/fi'
 import { obtenerResumenPedido } from '../services/pedidos.js'
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
+import { etiquetaEstado } from '../utils/pedidos.js'
 import { colores, tarjeta } from '../styles/tokens.js'
 
 const dps = (valor) => Number(valor ?? 0).toLocaleString('es-CO')
@@ -111,7 +112,7 @@ function ResumenPedido() {
           Número de seguimiento:{' '}
           <strong style={{ color: colores.primario }}>{resumen.numeroSeguimiento}</strong>
           {' '}
-          <span className="badge bg-secondary">{resumen.estado}</span>
+          <span className="badge bg-secondary">{etiquetaEstado(resumen.estado)}</span>
         </p>
       )}
 
@@ -189,19 +190,27 @@ function ResumenPedido() {
                 </div>
               )}
 
-              {(Number(resumen.propina) > 0) && (
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Propina</span>
-                  <span>${dps(resumen.propina)}</span>
-                </div>
-              )}
+              <div className="d-flex justify-content-between mb-2">
+                <span className="text-muted">
+                  Impuestos {Number(resumen.tasaImpuesto) > 0 && `(${dps(resumen.tasaImpuesto)}%)`}
+                </span>
+                <span>${dps(resumen.impuestos)}</span>
+              </div>
 
-              {(Number(resumen.impuestos) > 0) && (
+              <div className="d-flex justify-content-between mb-2">
+                <span className="text-muted">
+                  Propina
+                  {resumen.propinaTipo === 'PORCENTAJE' && Number(resumen.propinaPorcentaje) > 0
+                    ? ` (${dps(resumen.propinaPorcentaje)}%)`
+                    : ''}
+                </span>
+                <span>${dps(resumen.propina)}</span>
+              </div>
+
+              {(Number(resumen.cargos) > 0) && (
                 <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">
-                    Impuestos {Number(resumen.tasaImpuesto) > 0 && `(${dps(resumen.tasaImpuesto)}%)`}
-                  </span>
-                  <span>${dps(resumen.impuestos)}</span>
+                  <span className="text-muted">Cargos</span>
+                  <span>${dps(resumen.cargos)}</span>
                 </div>
               )}
 

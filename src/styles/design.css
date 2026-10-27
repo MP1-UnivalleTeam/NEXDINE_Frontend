@@ -28,3 +28,54 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/*
+ * Bootstrap deja .modal-dialog con pointer-events: none y solo lo restaura
+ * dentro de .modal-content. Los modales propios no usan .modal-content.
+ */
+.modal.show .modal-dialog > :not(.modal-content) {
+  pointer-events: auto;
+}
+
+/* Navegación compacta para meseros y clientes en pantallas pequeñas */
+@media (max-width: 991.98px) {
+  .nexdine-shell {
+    flex-direction: column;
+  }
+
+  .nexdine-shell .nexdine-sidebar {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    padding-top: 12px !important;
+  }
+
+  .nexdine-shell .nexdine-sidebar > div:first-child {
+    padding-bottom: 12px !important;
+  }
+
+  .nexdine-shell .nexdine-sidebar > div:nth-child(3) {
+    display: none !important;
+  }
+
+  .nexdine-shell .nexdine-sidebar .nav {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    padding: 0 8px;
+  }
+
+  .nexdine-shell .nexdine-sidebar .nav-item {
+    flex: 0 0 auto;
+  }
+
+  .nexdine-shell .nexdine-sidebar .nav-link {
+    white-space: nowrap;
+    margin: 4px 6px;
+  }
+
+  .nexdine-shell .nexdine-main {
+    margin-left: 0 !important;
+    padding: 16px !important;
+  }
+}

@@ -112,7 +112,7 @@ function Carrito() {
   const {
     items, quitarItem, actualizarCantidad, vaciarCarrito,
     subtotal, descuento, impuestos, propina, total, cupon, sucursal, totalItems,
-    agregarItem, setSucursal
+    tasaImpuesto, agregarItem, setSucursal
   } = useCarrito()
   const [recomendaciones, setRecomendaciones] = useState([])
   const [cargandoRecomendaciones, setCargandoRecomendaciones] = useState(false)
@@ -225,7 +225,10 @@ function Carrito() {
     return () => { cancelado = true }
   }, [items.length, sucursal?.id, setSucursal, intentoRecomendaciones])
 
-  const irAlMenu = () => navigate(obtenerContextoMenu() || '/menu')
+  const irAlMenu = () => {
+    const ruta = obtenerContextoMenu()
+    navigate(ruta && !ruta.includes('mesa=null') ? ruta : '/favoritos')
+  }
 
   const agregarRecomendacion = (producto, opciones = [], cantidad = 1) => {
     agregarItem(producto, opciones, cantidad)
@@ -457,7 +460,7 @@ function Carrito() {
           <button
             className="btn d-flex align-items-center"
             style={{ ...btnGhost, minHeight: '44px' }}
-            onClick={() => navigate(obtenerContextoMenu() || '/menu')}
+            onClick={irAlMenu}
           >
             <FiArrowLeft style={{ marginRight: '5px' }} /> Seguir comprando
           </button>
@@ -634,18 +637,18 @@ function Carrito() {
                       <span>-{formatoPrecio(descuento)}</span>
                     </div>
                   )}
-                  {impuestos > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: colores.textoSuave }}>Impuestos</span>
-                      <span style={{ color: colores.texto }}>{formatoPrecio(impuestos)}</span>
-                    </div>
-                  )}
-                  {propina.valor > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: colores.textoSuave }}>Propina</span>
-                      <span style={{ color: colores.texto }}>{formatoPrecio(propina.valor)}</span>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: colores.textoSuave }}>
+                      Impuestos{tasaImpuesto > 0 ? ` (${tasaImpuesto}%)` : ''}
+                    </span>
+                    <span style={{ color: colores.texto }}>{formatoPrecio(impuestos)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: colores.textoSuave }}>
+                      Propina{propina.tipo === 'porcentaje' && propina.porcentaje > 0 ? ` (${propina.porcentaje}%)` : ''}
+                    </span>
+                    <span style={{ color: colores.texto }}>{formatoPrecio(propina.valor)}</span>
+                  </div>
                 </div>
                 <hr style={{ borderColor: colores.borde, opacity: 1 }} />
                 <div className="tnum" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', ...cifrasTabulares }}>
