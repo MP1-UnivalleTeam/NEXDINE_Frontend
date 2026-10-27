@@ -4,6 +4,7 @@ import { FiPlus, FiEdit2, FiX, FiTrash2, FiCamera, FiUploadCloud, FiCheckCircle,
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
 import CargadorImagen from '../components/CargadorImagen.jsx'
+import GestionCupones from '../components/GestionCupones.jsx'
 import { obtenerMensajeError, MENSAJES, CARGANDO } from '../services/mensajes.js'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, input, cifrasTabulares } from '../styles/tokens.js'
 
@@ -72,6 +73,7 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   // Modal de confirmación de eliminación
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [productoAEliminar, setProductoAEliminar] = useState(null)
+  const [showGestionCupones, setShowGestionCupones] = useState(false)
 
   useEffect(() => {
     checkAuth()
@@ -760,7 +762,23 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
             </tbody>
           </table>
         </div>
+        {(esAdmin || esSuperadmin()) && (
+          <div className="d-flex justify-content-end mt-3">
+            <button
+              type="button"
+              className="btn"
+              style={{ ...btnGhost, minHeight: '44px', padding: '0 16px' }}
+              onClick={() => setShowGestionCupones(true)}
+            >
+              Administrar cupones de descuento
+            </button>
+          </div>
+        )}
       </div>
+
+      {showGestionCupones && (
+        <GestionCupones onClose={() => setShowGestionCupones(false)} />
+      )}
 
       {/* Modal Reutilizable con Backdrop */}
       {showModal && (

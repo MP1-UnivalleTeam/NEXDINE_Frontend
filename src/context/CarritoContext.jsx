@@ -17,6 +17,7 @@ const CarritoContext = createContext(null)
 
 const STORAGE_KEY = 'nexdine_carrito'
 const PROPINA_INICIAL = { tipo: 'ninguna', porcentaje: 0, valor: 0 }
+export const MAX_OBSERVACION_CARACTERES = 500
 
 function estadoInicial() {
   return {
@@ -130,6 +131,22 @@ export function CarritoProvider({ children }) {
     })
   }, [guardarEnStorage])
 
+  const actualizarObservacion = useCallback((key, observacion) => {
+    const texto = String(observacion ?? '')
+    if (texto.length > MAX_OBSERVACION_CARACTERES) return false
+    setState(prev => {
+      const newState = {
+        ...prev,
+        items: prev.items.map(item => item.key === key
+          ? { ...item, observaciones: texto.trim() }
+          : item)
+      }
+      guardarEnStorage(newState)
+      return newState
+    })
+    return true
+  }, [guardarEnStorage])
+
   const vaciarCarrito = useCallback(() => {
     setState(prev => {
       const newState = {
@@ -222,6 +239,7 @@ export function CarritoProvider({ children }) {
     agregarItem,
     quitarItem,
     actualizarCantidad,
+    actualizarObservacion,
     vaciarCarrito,
     aplicarCupon,
     quitarCupon,

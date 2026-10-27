@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  FiTrash2, FiArrowLeft, FiShoppingCart, FiMinus, FiPlus, FiCoffee,
+  FiTrash2, FiArrowLeft, FiShoppingCart, FiMinus, FiPlus, FiCoffee, FiEdit2, FiMessageSquare,
   FiMapPin, FiChevronRight, FiCheckCircle, FiAlertCircle
 } from 'react-icons/fi'
 import api from '../services/api.js'
-import { useCarrito } from '../context/CarritoContext.jsx'
+import { MAX_OBSERVACION_CARACTERES, useCarrito } from '../context/CarritoContext.jsx'
 import CuponDescuento from '../components/CuponDescuento.jsx'
 import SelectorPropina from '../components/SelectorPropina.jsx'
 import Sugerencias from '../components/Sugerencias.jsx'
@@ -112,7 +112,7 @@ function Carrito() {
   const {
     items, quitarItem, actualizarCantidad, vaciarCarrito,
     subtotal, descuento, impuestos, propina, total, cupon, sucursal, totalItems,
-    tasaImpuesto, agregarItem, setSucursal
+    tasaImpuesto, agregarItem, setSucursal, actualizarObservacion
   } = useCarrito()
   const [recomendaciones, setRecomendaciones] = useState([])
   const [cargandoRecomendaciones, setCargandoRecomendaciones] = useState(false)
@@ -122,6 +122,20 @@ function Carrito() {
   const [productoParaPersonalizar, setProductoParaPersonalizar] = useState(null)
   const [avisoProductoAgregado, setAvisoProductoAgregado] = useState('')
   const [intentoRecomendaciones, setIntentoRecomendaciones] = useState(0)
+  const [observacionEditando, setObservacionEditando] = useState(null)
+  const [borradorObservacion, setBorradorObservacion] = useState('')
+
+  const abrirObservacion = (item) => {
+    setObservacionEditando(item.key)
+    setBorradorObservacion(item.observaciones || '')
+  }
+
+  const guardarObservacion = (key) => {
+    if (actualizarObservacion(key, borradorObservacion)) {
+      setObservacionEditando(null)
+      setBorradorObservacion('')
+    }
+  }
 
   useEffect(() => {
     if (items.length > 0) return undefined
@@ -512,6 +526,96 @@ function Carrito() {
                             ? `${item.precioUnitario > 0 ? ' + ' : ''}${formatoPrecio(item.adicionalOpciones)} opciones`
                             : ''}
                         </small>
+
+                        <div style={{ marginTop: '10px' }}>
+                          {observacionEditando === item.key ? (
+                            <div>
+                              <label htmlFor={`observacion-${item.key}`} style={{
+                                display: 'block', color: colores.textoSuave,
+                                fontSize: '12px', fontWeight: 600, marginBottom: '5px'
+                              }}>
+                                Observación para cocina
+                              </label>
+                              <textarea
+                                id={`observacion-${item.key}`}
+                                className="form-control form-control-sm"
+                                rows="2"
+                                maxLength={MAX_OBSERVACION_CARACTERES}
+                                placeholder="Ej.: sin cebolla, salsa aparte"
+                                value={borradorObservacion}
+                                onChange={(event) => setBorradorObservacion(event.target.value)}
+                                style={{ resize: 'vertical', maxWidth: '100%' }}
+                              />
+                              <div className="d-flex align-items-center justify-content-between gap-2 mt-1">
+                                <small style={{ color: colores.textoSuave }}>
+                                  {borradorObservacion.length}/{MAX_OBSERVACION_CARACTERES}
+                                </small>
+                                <div className="d-flex gap-2">
+                                  <button
+                                    type="button"
+                                    className="btn btn-link btn-sm p-0"
+                                    onClick={() => {
+                                      setObservacionEditando(null)
+                                      setBorradorObservacion('')
+                                    }}
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-link btn-sm p-0"
+                                    style={{ color: colores.primario, fontWeight: 700 }}
+                                    onClick={() => guardarObservacion(item.key)}
+                                  >
+                                    Guardar
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : item.observaciones ? (
+                            <div style={{
+                              display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start',
+                              justifyContent: 'space-between', gap: '6px 12px'
+                            }}>
+                              <small style={{
+                                color: colores.textoSuave, overflowWrap: 'anywhere',
+                                whiteSpace: 'pre-wrap', minWidth: 0
+                              }}>
+                                <FiMessageSquare aria-hidden="true" style={{ marginRight: '5px' }} />
+                                <strong>Observación:</strong> {item.observaciones}
+                              </small>
+                              <div className="d-flex gap-2">
+                                <button
+                                  type="button"
+                                  className="btn btn-link btn-sm p-0"
+                                  onClick={() => abrirObservacion(item)}
+                                  aria-label={`Editar observación de ${item.producto.nombre}`}
+                                >
+                                  <FiEdit2 style={{ marginRight: '4px' }} /> Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-link btn-sm p-0"
+                                  style={{ color: colores.error }}
+                                  onClick={() => actualizarObservacion(item.key, '')}
+                                  aria-label={`Eliminar observación de ${item.producto.nombre}`}
+                                >
+                                  Quitar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-link btn-sm p-0"
+                              style={{ color: colores.secundario }}
+                              onClick={() => abrirObservacion(item)}
+                            >
+                              <FiMessageSquare style={{ marginRight: '5px' }} />
+                              Añadir observación
+                            </button>
+                          )}
+                        </div>
 
                         {/* Stepper de cantidad + quitar */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
