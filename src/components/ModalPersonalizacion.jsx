@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FiX, FiCheck } from 'react-icons/fi'
 import { obtenerOpcionesProducto } from '../services/pedidos.js'
 import { formatearDinero, multiplicarDinero, sumarDinero } from '../utils/dinero.js'
+import { colores, backdrop } from '../styles/tokens.js'
 
 /**
  * RF020 — Modal de personalización de producto.
@@ -83,14 +84,11 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
 
   return (
     <>
-      <div onClick={onCerrar} style={{
-        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-        backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1040
-      }} />
+      <div onClick={onCerrar} style={backdrop} />
       <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
         <div className="modal-dialog modal-md">
           <div className="modal-content">
-            <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+            <div className="modal-header" style={{ backgroundColor: colores.primario, color: 'white' }}>
               <h5 className="modal-title">{producto.nombre}</h5>
               <button type="button" className="btn-close btn-close-white" onClick={onCerrar}></button>
             </div>
@@ -103,7 +101,7 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
 
               {loading ? (
                 <div className="text-center py-4">
-                  <div className="spinner-border spinner-border-sm" style={{ color: '#1a3c34' }}></div>
+                  <div className="spinner-border spinner-border-sm" style={{ color: colores.primario }}></div>
                   <p className="text-muted small mt-2">Cargando opciones...</p>
                 </div>
               ) : opciones.length === 0 ? (
@@ -130,8 +128,8 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
                               style={{
                                 cursor: noDisponible ? 'not-allowed' : 'pointer',
                                 opacity: noDisponible ? 0.55 : 1,
-                                borderColor: seleccionada ? '#1a3c34' : '#dee2e6',
-                                backgroundColor: seleccionada ? '#f2f7f5' : '#fff'
+                                borderColor: seleccionada ? colores.primario : colores.borde,
+                                backgroundColor: seleccionada ? colores.mint : colores.tarjeta
                               }}
                             >
                               <input
@@ -177,7 +175,7 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
                 </div>
                 <div className="text-end">
                   <small className="text-muted d-block">Total</small>
-                  <strong style={{ color: '#1a3c34', fontSize: '1.1rem' }}>
+                  <strong style={{ color: colores.primario, fontSize: '1.1rem' }}>
                     {formatearDinero(precioTotal)}
                   </strong>
                 </div>
@@ -190,7 +188,7 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
               <button
                 type="button"
                 className="btn btn-sm"
-                style={{ backgroundColor: '#1a3c34', color: 'white' }}
+                style={{ backgroundColor: colores.primario, color: 'white' }}
                 onClick={handleConfirmar}
                 disabled={loading}
               >

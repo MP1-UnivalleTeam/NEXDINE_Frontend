@@ -4,6 +4,7 @@ import { FiPlus } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
 import { obtenerMensajeError, MENSAJES } from '../services/mensajes.js'
+import { colores, tarjeta } from '../styles/tokens.js'
 
 function Dashboard() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -266,11 +267,11 @@ function Dashboard() {
 
   const getRoleBadge = (rol) => {
     const styles = {
-      ADMINISTRADOR: { bg: '#fde8e8', color: '#c0392b', border: '#f5c6cb', icon: 'fa-shield-halved', label: 'Administrador' },
-      SUPERADMIN: { bg: '#2c5a4d', color: '#ffffff', border: '#1a3c34', icon: 'fa-crown', label: 'Superadmin' },
-      COCINERO: { bg: '#e8f0fe', color: '#1a56db', border: '#b8d0fb', icon: 'fa-fire-flame-curved', label: 'Cocinero' },
-      MESERO: { bg: '#e8f0fe', color: '#1a56db', border: '#b8d0fb', icon: 'fa-bell-concierge', label: 'Mesero' },
-      CLIENTE: { bg: '#e6f9f0', color: '#1a7a4a', border: '#a8e6c4', icon: 'fa-user', label: 'Cliente' }
+      ADMINISTRADOR: { bg: colores.errorFondo, color: '#B91C1C', border: '#FECACA', icon: 'fa-shield-halved', label: 'Administrador' },
+      SUPERADMIN: { bg: colores.primario, color: '#ffffff', border: colores.primario, icon: 'fa-crown', label: 'Superadmin' },
+      COCINERO: { bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', icon: 'fa-fire-flame-curved', label: 'Cocinero' },
+      MESERO: { bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', icon: 'fa-bell-concierge', label: 'Mesero' },
+      CLIENTE: { bg: colores.exitoFondo, color: colores.exitoTexto, border: '#A7F3D0', icon: 'fa-user', label: 'Cliente' }
     }
     const style = styles[rol] || styles.CLIENTE
     return (
@@ -303,7 +304,7 @@ function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <span className="text-muted">Hola, <strong>{currentUser.nombre}</strong></span>
             <img
-              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=1a3c34&color=fff`}
+              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=11362E&color=fff`}
               className="rounded-circle"
               width="40"
               height="40"
@@ -317,7 +318,7 @@ function Dashboard() {
           <div className="row">
             {[1, 2, 3, 4, 5, 6].map(i => (
               <div key={i} className="col-md-3 mb-3">
-                <div className="card p-3 text-center" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+                <div className="card p-3 text-center" style={tarjeta}>
                   <img src="https://via.placeholder.com/150" className="mb-2 rounded" alt="Producto" />
                   <h5>Hamburguesa</h5>
                   <p className="text-muted">$28.900</p>
@@ -336,7 +337,7 @@ function Dashboard() {
                 <h4 className="mb-0">Gestión de Usuarios</h4>
                 <button
                   className="btn btn-sm"
-                  style={{ backgroundColor: '#1a3c34', color: 'white' }}
+                  style={{ backgroundColor: colores.primario, color: 'white' }}
                   onClick={openCreateUserModal}
                 >
                   <FiPlus style={{ marginRight: '5px' }} /> Crear Usuario
@@ -352,7 +353,7 @@ function Dashboard() {
 
             {/* Buscar Usuario */}
             {isAdmin() && (
-              <div className="card p-3 mb-4" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+                <div className="card p-3 mb-4" style={tarjeta}>
                 <h5 className="mb-3">
                   <i className="fa-solid fa-magnifying-glass me-2"></i>
                   Buscar Usuario
@@ -371,7 +372,7 @@ function Dashboard() {
                       />
                     </div>
                     <div className="col-md-2">
-                      <button type="submit" className="btn btn-sm w-100" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+                      <button type="submit" className="btn btn-sm w-100" style={{ backgroundColor: colores.primario, color: 'white' }}>
                         <i className="fa-solid fa-search me-1"></i>Buscar
                       </button>
                     </div>
@@ -394,7 +395,7 @@ function Dashboard() {
             )}
 
             {/* Tabla de Usuarios */}
-            <div className="card p-4" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+            <div className="card p-4" style={tarjeta}>
               <table className="table table-hover align-middle">
                 <thead className="text-muted">
                   <tr>
@@ -475,12 +476,12 @@ function Dashboard() {
         <>
           <div onClick={() => setShowEditModal(false)} style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: 1040
+            backgroundColor: 'rgba(17, 54, 46, 0.35)', zIndex: 1040
           }} />
           <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
             <div className="modal-dialog modal-sm">
               <div className="modal-content">
-                <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+                <div className="modal-header" style={{ backgroundColor: colores.primario, color: 'white' }}>
                   <h5 className="modal-title"><i className="fa-solid fa-pen me-2"></i>Editar Usuario</h5>
                   <button type="button" className="btn-close btn-close-white" onClick={() => setShowEditModal(false)}></button>
                 </div>
@@ -563,7 +564,7 @@ function Dashboard() {
                   </div>
                   <div className="modal-footer">
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowEditModal(false)}>Cancelar</button>
-                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: '#1a3c34', color: 'white' }}>Guardar cambios</button>
+                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: colores.primario, color: 'white' }}>Guardar cambios</button>
                   </div>
                 </form>
               </div>
@@ -580,14 +581,14 @@ function Dashboard() {
             onClick={closeCreateUserModal}
             style={{
               position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-              backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: 1040
+              backgroundColor: 'rgba(17, 54, 46, 0.35)', zIndex: 1040
             }}
           />
           {/* Modal */}
           <div className="modal show" style={{ display: 'block', zIndex: 1050 }} tabIndex="-1">
             <div className="modal-dialog modal-md">
               <div className="modal-content">
-                <div className="modal-header" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+                <div className="modal-header" style={{ backgroundColor: colores.primario, color: 'white' }}>
                   <h5 className="modal-title">
                     <FiPlus style={{ marginRight: '8px' }} />Crear nuevo usuario
                   </h5>
@@ -698,7 +699,7 @@ function Dashboard() {
                     <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateUserModal}>
                       Cancelar
                     </button>
-                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: '#1a3c34', color: 'white' }}>
+                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: colores.primario, color: 'white' }}>
                       <FiPlus style={{ marginRight: '5px' }} /> Crear
                     </button>
                   </div>

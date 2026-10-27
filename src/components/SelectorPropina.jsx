@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FiDollarSign } from 'react-icons/fi'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { formatearDinero, redondearDinero } from '../utils/dinero.js'
+import { colores, tarjeta } from '../styles/tokens.js'
 
 /**
  * RF039 — Selector de propina.
@@ -35,10 +36,10 @@ function SelectorPropina() {
   }
 
   return (
-    <div className="card mb-3" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+    <div className="card mb-3" style={{ border: tarjeta.border, borderRadius: tarjeta.borderRadius, backgroundColor: tarjeta.background, boxShadow: tarjeta.boxShadow }}>
       <div className="card-body">
         <h6 className="mb-2">
-          <FiDollarSign style={{ marginRight: '6px', color: '#1a3c34' }} />
+          <FiDollarSign style={{ marginRight: '6px', color: colores.primario }} />
           Propina
         </h6>
 
@@ -49,9 +50,9 @@ function SelectorPropina() {
                 type="button"
                 className="btn btn-sm w-100"
                 style={{
-                  backgroundColor: propina.tipo === 'porcentaje' && propina.porcentaje === pct ? '#1a3c34' : '#fff',
-                  color: propina.tipo === 'porcentaje' && propina.porcentaje === pct ? '#fff' : '#1a3c34',
-                  border: '1px solid #1a3c34'
+                  backgroundColor: propina.tipo === 'porcentaje' && propina.porcentaje === pct ? colores.primario : colores.tarjeta,
+                  color: propina.tipo === 'porcentaje' && propina.porcentaje === pct ? '#fff' : colores.primario,
+                  border: `1px solid ${colores.primario}`
                 }}
                 onClick={() => handlePorcentaje(pct)}
               >

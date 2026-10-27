@@ -7,26 +7,30 @@
  * Permisos:
  *   · ADMINISTRADOR / SUPERADMIN → Usuarios, Productos, Mesas, Pedidos, Reportes
  *   · CLIENTE                   → Ver Menú
+ *
+ * Visual: guía "Forest Culinary Precision" (DESIGN.md) — fondo verde bosque
+ * #11362E, elemento activo con píldora clara y borde de resalte.
  */
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
+import { colores } from '../styles/tokens.js'
 
 const LINK_BASE = {
-  color: 'rgba(255,255,255,0.8)',
+  color: 'rgba(255,255,255,0.78)',
   padding: '12px 20px',
+  margin: '4px 12px',
   display: 'flex',
   alignItems: 'center',
-  gap: '12px'
+  gap: '12px',
+  borderRadius: '8px',
+  textDecoration: 'none',
+  fontSize: '14px'
 }
 
 const LINK_ACTIVO = {
-  backgroundColor: '#2c5a4d',
-  borderLeft: '4px solid #fff',
-  color: 'white',
-  fontWeight: 600,
-  padding: '12px 20px',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '12px'
+  ...LINK_BASE,
+  backgroundColor: 'rgba(255,255,255,0.12)',
+  color: '#FFFFFF',
+  fontWeight: 600
 }
 
 function Sidebar({ currentUser, rutaActual, onLogout }) {
@@ -41,26 +45,31 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
   return (
     <div style={{
       width: '260px',
-      backgroundColor: '#1a3c34',
+      backgroundColor: colores.primario,
       color: 'white',
       position: 'fixed',
       height: '100%',
-      paddingTop: '20px'
+      paddingTop: '20px',
+      display: 'flex',
+      flexDirection: 'column'
     }}>
-      <div style={{ padding: '0 20px 30px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+      <div style={{ padding: '0 20px 24px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{
-          fontSize: '1.5rem',
-          fontWeight: 'bold',
+          fontSize: '1.35rem',
+          fontWeight: 700,
           letterSpacing: '1px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px'
         }}>
-          <i className="fa-solid fa-utensils"></i> NEXDINE
+          <i className="fa-solid fa-utensils" style={{ color: colores.exito }}></i> NEXDINE
         </div>
+        <small style={{ color: 'rgba(255,255,255,0.55)', display: 'block', marginTop: '2px' }}>
+          POS &amp; Backoffice
+        </small>
       </div>
 
-      <ul className="nav flex-column mt-3">
+      <ul className="nav flex-column mt-2" style={{ flex: 1 }}>
         {esCliente && (
           <li className="nav-item">
             <a href={obtenerContextoMenu() || '/menu'} className="nav-link" style={estilo('/menu')}>
@@ -83,7 +92,7 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
             </li>
             <li className="nav-item">
               <a href="/mesas" className="nav-link" style={estilo('/mesas')}>
-                <i className="fa-solid fa-table-cells"></i> Mesas
+                <i className="fa-solid fa-chair"></i> Mesas
               </a>
             </li>
             {esSuperadmin && (
@@ -111,11 +120,42 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
         )}
       </ul>
 
-      <div style={{ position: 'absolute', bottom: '20px', width: '100%', padding: '0 20px' }}>
+      <div style={{
+        margin: '0 12px 12px 12px',
+        padding: '12px',
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderRadius: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px'
+      }}>
+        <img
+          src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=10B981&color=11362E`}
+          className="rounded-circle" width="36" height="36" alt="Avatar"
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {currentUser.nombre}
+          </div>
+          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
+            {currentUser.rol === 'SUPERADMIN' ? 'Admin General' : currentUser.rol === 'ADMINISTRADOR' ? 'Administrador' : 'Cliente'}
+          </div>
+        </div>
+        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: colores.exito, flexShrink: 0 }}></span>
+      </div>
+
+      <div style={{ padding: '0 20px 20px 20px' }}>
         <a
           href="/login"
           onClick={(e) => { e.preventDefault(); if (onLogout) onLogout() }}
           className="text-white text-decoration-none"
+          style={{
+            fontSize: '14px',
+            color: 'rgba(255,255,255,0.78) !important',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}
         >
           <i className="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
         </a>

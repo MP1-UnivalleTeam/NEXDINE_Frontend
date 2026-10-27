@@ -1,0 +1,25 @@
+/**
+ * Estilos base del sistema visual NEXDINE (DESIGN.md "Forest Culinary Precision").
+ * Se cargan después de Bootstrap desde main.jsx; solo define la base global
+ * y utilidades pequeñas. El detalle por pantalla vive en los componentes.
+ */
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #F8FAFC;
+  color: #1E293B;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Cifras tabulares para precios, totales y cantidades */
+.tnum {
+  font-feature-settings: 'tnum' 1, 'cv05' 1;
+}
+
+/* Descripciones truncadas en tarjetas de comida */
+.truncar-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

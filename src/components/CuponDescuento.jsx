@@ -3,6 +3,7 @@ import { FiTag, FiX, FiCheck } from 'react-icons/fi'
 import { validarCupon } from '../services/pedidos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { formatearDinero } from '../utils/dinero.js'
+import { colores, tarjeta } from '../styles/tokens.js'
 
 /**
  * RF036 — Aplicar cupón de descuento.
@@ -55,10 +56,10 @@ function CuponDescuento() {
   }
 
   return (
-    <div className="card mb-3" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+    <div className="card mb-3" style={{ border: tarjeta.border, borderRadius: tarjeta.borderRadius, backgroundColor: tarjeta.background, boxShadow: tarjeta.boxShadow }}>
       <div className="card-body">
         <h6 className="mb-2">
-          <FiTag style={{ marginRight: '6px', color: '#1a3c34' }} />
+          <FiTag style={{ marginRight: '6px', color: colores.primario }} />
           Cupón de descuento
         </h6>
 
@@ -104,7 +105,7 @@ function CuponDescuento() {
               <button
                 type="button"
                 className="btn btn-sm"
-                style={{ backgroundColor: '#1a3c34', color: 'white' }}
+                style={{ backgroundColor: colores.primario, color: 'white' }}
                 onClick={handleAplicar}
                 disabled={loading}
               >

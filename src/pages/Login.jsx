@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api.js'
+import { colores, sombras, radios, btnPrimario } from '../styles/tokens.js'
 
 function Login() {
   const [nombre, setNombre] = useState('')
@@ -43,24 +44,24 @@ function Login() {
 
   return (
     <div style={{
-      backgroundColor: '#f4f6f8',
+      backgroundColor: colores.fondo,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      height: '100vh'
+      minHeight: '100vh'
     }}>
       <div style={{
         width: '100%',
         maxWidth: '400px',
         padding: '2rem',
-        borderRadius: '12px',
-        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-        background: 'white'
+        borderRadius: `${radios.xl}px`,
+        boxShadow: sombras.nivel3,
+        background: colores.tarjeta
       }}>
         <div className="text-center mb-4">
-          <i className="fa-solid fa-utensils fa-2x" style={{ color: '#1a3c34' }}></i>
+          <i className="fa-solid fa-utensils fa-2x" style={{ color: colores.primario }}></i>
           <h3 className="mt-2" style={{
-            color: '#1a3c34',
+            color: colores.primario,
             fontWeight: 'bold',
             letterSpacing: '2px'
           }}>NEXDINE</h3>
@@ -103,10 +104,10 @@ function Login() {
           {/* Error de usuario suspendido */}
           {error === 'Usuario suspendido' && (
             <div className="alert small mb-3 d-flex align-items-center gap-2" style={{
-              backgroundColor: '#fff3cd',
-              border: '1px solid #ffc107',
-              color: '#856404',
-              borderRadius: '8px'
+              backgroundColor: colores.advertenciaFondo,
+              border: `1px solid ${colores.advertencia}`,
+              color: colores.advertenciaTexto,
+              borderRadius: `${radios.sm}px`
             }}>
               <i className="fa-solid fa-ban fa-lg text-warning"></i>
               <div>
@@ -117,9 +118,8 @@ function Login() {
           )}
 
           <button type="submit" className="btn w-100" style={{
-            backgroundColor: '#1a3c34',
-            border: 'none',
-            color: 'white'
+            ...btnPrimario,
+            border: 'none'
           }}>
             <i className="fa-solid fa-right-to-bracket me-2"></i>Iniciar Sesión
           </button>

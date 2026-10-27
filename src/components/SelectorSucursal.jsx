@@ -1,3 +1,5 @@
+import { tarjeta } from '../styles/tokens.js'
+
 function SelectorSucursal({ sucursales = [], seleccionada = null, onSeleccionar }) {
   if (!sucursales.length) return null
 
@@ -7,7 +9,7 @@ function SelectorSucursal({ sucursales = [], seleccionada = null, onSeleccionar 
   }
 
   return (
-    <div className="card mb-3" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+    <div className="card mb-3" style={tarjeta}>
       <div className="card-body">
         <label className="form-label small fw-semibold mb-2">Sucursal</label>
         <select
