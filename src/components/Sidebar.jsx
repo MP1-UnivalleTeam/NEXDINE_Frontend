@@ -8,6 +8,7 @@
  *   · ADMINISTRADOR / SUPERADMIN → Usuarios, Productos, Mesas, Pedidos, Reportes
  *   · CLIENTE                   → Ver Menú
  */
+import { obtenerContextoMenu } from '../utils/contextoMenu.js'
 
 const LINK_BASE = {
   color: 'rgba(255,255,255,0.8)',
@@ -62,7 +63,7 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
       <ul className="nav flex-column mt-3">
         {esCliente && (
           <li className="nav-item">
-            <a href="/menu" className="nav-link" style={estilo('/menu')}>
+            <a href={obtenerContextoMenu() || '/menu'} className="nav-link" style={estilo('/menu')}>
               <i className="fa-solid fa-utensils"></i> Ver Menú
             </a>
           </li>

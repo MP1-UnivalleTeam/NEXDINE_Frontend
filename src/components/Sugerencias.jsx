@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { FiPlus } from 'react-icons/fi'
 import { obtenerSugerencias } from '../services/pedidos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
+import ModalPersonalizacion from './ModalPersonalizacion.jsx'
+import { formatearDinero } from '../utils/dinero.js'
 
 /**
  * RF034 — Sugerencias de productos.
@@ -12,11 +14,13 @@ import { useCarrito } from '../context/CarritoContext.jsx'
  *   · Consistencia: mismos cards que el menú principal.
  *   · Reconocimiento: productos con imagen, precio y disponibilidad visibles.
  */
-function Sugerencias({ productoActual, onAgregar }) {
+function Sugerencias({ productoActual, onAgregar, excluir = [] }) {
   const [sugerencias, setSugerencias] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const { agregarItem } = useCarrito()
+  const [productoParaPersonalizar, setProductoParaPersonalizar] = useState(null)
+  const { agregarItem, sucursal } = useCarrito()
+  const claveExcluir = excluir.filter(Boolean).join(',')
 
   useEffect(() => {
     if (!productoActual?.id) {
@@ -24,13 +28,16 @@ function Sugerencias({ productoActual, onAgregar }) {
       return
     }
     cargarSugerencias()
-  }, [productoActual?.id])
+  }, [productoActual?.id, sucursal?.id, claveExcluir])
 
   const cargarSugerencias = async () => {
     setLoading(true)
     setError(false)
     try {
-      const data = await obtenerSugerencias(productoActual.id)
+      const data = await obtenerSugerencias(productoActual.id, {
+        sucursalId: sucursal?.id,
+        excluir: excluir.filter(Boolean)
+      })
       setSugerencias(Array.isArray(data) ? data : [])
     } catch (err) {
       setError(true)
@@ -40,10 +47,19 @@ function Sugerencias({ productoActual, onAgregar }) {
     }
   }
 
+  const agregarSugerencia = (producto, opciones = [], cantidad = 1) => {
+    if (!producto?.id) return
+    agregarItem(producto, opciones, cantidad)
+    if (onAgregar) onAgregar(producto)
+  }
+
   const handleAgregar = (producto) => {
     if (!producto?.id) return
-    agregarItem(producto, [], 1)
-    if (onAgregar) onAgregar(producto)
+    if (producto.tieneOpciones) {
+      setProductoParaPersonalizar(producto)
+      return
+    }
+    agregarSugerencia(producto)
   }
 
   if (loading) {
@@ -94,7 +110,7 @@ function Sugerencias({ productoActual, onAgregar }) {
               <div className="card-body p-2">
                 <h6 className="card-title small mb-1">{producto.nombre}</h6>
                 <p className="card-text small text-muted mb-1">
-                  ${parseFloat(producto.precio || 0).toLocaleString('es-CO')}
+                  {formatearDinero(producto.precio || 0)}
                 </p>
                 {!producto.disponible && (
                   <span className="badge bg-danger" style={{ fontSize: '0.65rem' }}>No disponible</span>

@@ -2,6 +2,29 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FiArrowLeft, FiPackage } from 'react-icons/fi'
 import { obtenerResumenPedido } from '../services/pedidos.js'
+import { obtenerContextoMenu } from '../utils/contextoMenu.js'
+
+const dps = (valor) => Number(valor ?? 0).toLocaleString('es-CO')
+
+function textoPersonalizaciones(item) {
+  if (Array.isArray(item?.personalizaciones)) {
+    return item.personalizaciones
+      .map(valor => (valor == null ? '' : String(valor)))
+      .filter(Boolean)
+      .join(', ')
+  }
+  if (typeof item?.personalizaciones === 'string') {
+    return item.personalizaciones
+  }
+  return ''
+}
+
+function importeItem(item) {
+  const importe = Number(item?.importe)
+  if (Number.isFinite(importe)) return importe
+  const precio = Number(item?.precioUnitario) + Number(item?.adicionalOpciones)
+  return precio * Number(item?.cantidad || 0)
+}
 
 /**
  * RF052 — Resumen detallado de cuenta.
@@ -69,18 +92,27 @@ function ResumenPedido() {
 
   return (
     <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="d-flex justify-content-between align-items-center mb-2">
         <h2 className="mb-0">
           <FiPackage style={{ marginRight: '8px' }} />
           Resumen del pedido
         </h2>
         <button
           className="btn btn-sm btn-outline-secondary"
-          onClick={() => navigate(-1)}
+          onClick={() => navigate(obtenerContextoMenu() || '/menu')}
         >
-          <FiArrowLeft style={{ marginRight: '5px' }} /> Volver
+          <FiArrowLeft style={{ marginRight: '5px' }} /> Volver al menú
         </button>
       </div>
+
+      {resumen.numeroSeguimiento && (
+        <p className="text-muted small">
+          Número de seguimiento:{' '}
+          <strong style={{ color: '#1a3c34' }}>{resumen.numeroSeguimiento}</strong>
+          {' '}
+          <span className="badge bg-secondary">{resumen.estado}</span>
+        </p>
+      )}
 
       <div className="row">
         <div className="col-12 col-lg-8">
@@ -88,22 +120,43 @@ function ResumenPedido() {
           <div className="card mb-3" style={{ border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderRadius: '8px' }}>
             <div className="card-body">
               <h6 className="mb-3">Productos</h6>
-              {(Array.isArray(resumen.items) ? resumen.items : []).map((item, idx) => (
+              {(Array.isArray(resumen.items) ? resumen.items : []).map((item, idx) => {
+                const personalizaciones = typeof item?.personalizaciones === 'string'
+                  ? item.personalizaciones
+                  : Array.isArray(item?.personalizaciones)
+                    ? item.personalizaciones
+                      .map(v => (v == null ? '' : String(v)))
+                      .filter(Boolean)
+                      .join(', ')
+                    : ''
+                return (
                 <div key={idx} className="d-flex justify-content-between align-items-start mb-3 pb-3 border-bottom">
                   <div>
                     <strong>{item.cantidad}x {item.nombre}</strong>
-                    {item.personalizaciones?.length > 0 && (
+                    {personalizaciones && (
                       <small className="text-muted d-block">
                         <i className="fa-solid fa-pen me-1"></i>
-                        {item.personalizaciones.join(', ')}
+                        {personalizaciones}
+                      </small>
+                    )}
+                    {Number(item?.adicionalOpciones) > 0 && (
+                      <small className="text-muted d-block">
+                        Adicionales: ${dps(item.adicionalOpciones)} por unidad
+                      </small>
+                    )}
+                    {item.observaciones && (
+                      <small className="text-muted d-block">
+                        <i className="fa-solid fa-note-sticky me-1"></i>
+                        {item.observaciones}
                       </small>
                     )}
                   </div>
                   <span className="text-end">
-                    ${((item.precioUnitario || 0) * (item.cantidad || 1)).toLocaleString('es-CO')}
+                    ${dps(importeItem(item))}
                   </span>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
@@ -116,34 +169,38 @@ function ResumenPedido() {
 
               <div className="d-flex justify-content-between mb-2">
                 <span className="text-muted">Subtotal</span>
-                <span>${resumen.subtotal?.toLocaleString('es-CO') || '0'}</span>
+                <span>${dps(resumen.subtotal)}</span>
               </div>
 
-              {(resumen.descuento || 0) > 0 && (
+              {(Number(resumen.descuento) > 0) && (
                 <div className="d-flex justify-content-between mb-2 text-success">
-                  <span>Descuento</span>
-                  <span>-${(resumen.descuento || 0).toLocaleString('es-CO')}</span>
+                  <span>
+                    Descuento {resumen.cuponCodigo ? `(${resumen.cuponCodigo})` : ''}
+                  </span>
+                  <span>-${dps(resumen.descuento)}</span>
                 </div>
               )}
 
-              {(resumen.cargos || 0) > 0 && (
+              {(Number(resumen.cargos) > 0) && (
                 <div className="d-flex justify-content-between mb-2">
                   <span className="text-muted">Cargos</span>
-                  <span>${(resumen.cargos || 0).toLocaleString('es-CO')}</span>
+                  <span>${dps(resumen.cargos)}</span>
                 </div>
               )}
 
-              {(resumen.propina || 0) > 0 && (
+              {(Number(resumen.propina) > 0) && (
                 <div className="d-flex justify-content-between mb-2">
                   <span className="text-muted">Propina</span>
-                  <span>${(resumen.propina || 0).toLocaleString('es-CO')}</span>
+                  <span>${dps(resumen.propina)}</span>
                 </div>
               )}
 
-              {(resumen.impuestos || 0) > 0 && (
+              {(Number(resumen.impuestos) > 0) && (
                 <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Impuestos</span>
-                  <span>${(resumen.impuestos || 0).toLocaleString('es-CO')}</span>
+                  <span className="text-muted">
+                    Impuestos {Number(resumen.tasaImpuesto) > 0 && `(${dps(resumen.tasaImpuesto)}%)`}
+                  </span>
+                  <span>${dps(resumen.impuestos)}</span>
                 </div>
               )}
 
@@ -151,7 +208,7 @@ function ResumenPedido() {
               <div className="d-flex justify-content-between">
                 <strong>Total</strong>
                 <strong style={{ color: '#1a3c34', fontSize: '1.2rem' }}>
-                  ${(resumen.total || 0).toLocaleString('es-CO')}
+                  ${dps(resumen.total)}
                 </strong>
               </div>
             </div>

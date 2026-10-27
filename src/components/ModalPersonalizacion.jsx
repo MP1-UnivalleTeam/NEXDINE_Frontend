@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { FiX, FiCheck } from 'react-icons/fi'
 import { obtenerOpcionesProducto } from '../services/pedidos.js'
+import { formatearDinero, multiplicarDinero, sumarDinero } from '../utils/dinero.js'
 
 /**
  * RF020 — Modal de personalización de producto.
@@ -21,8 +22,12 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
 
   useEffect(() => {
     if (!producto) return
+    setSeleccionadas([])
+    setCantidad(1)
+    setError('')
+    setLoading(true)
     cargarOpciones()
-  }, [producto])
+  }, [producto?.id])
 
   const cargarOpciones = async () => {
     setError('')
@@ -38,18 +43,41 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
     }
   }
 
-  const toggleOpcion = (opcion) => {
+  const toggleOpcion = (grupo, opcion) => {
+    if (opcion.disponible === false) return
     setSeleccionadas(prev => {
       const existe = prev.find(o => o.id === opcion.id)
       if (existe) return prev.filter(o => o.id !== opcion.id)
-      return [...prev, opcion]
+
+      const seleccion = {
+        ...opcion,
+        precio: Number(opcion.precio ?? opcion.precioAdicional ?? 0),
+        grupoId: grupo.id,
+        grupoNombre: grupo.nombre
+      }
+      if (grupo.permiteMultiple) return [...prev, seleccion]
+      return [...prev.filter(o => o.grupoId !== grupo.id), seleccion]
     })
+    setError('')
   }
 
-  const precioAdicional = seleccionadas.reduce((sum, o) => sum + (o.precio || 0), 0)
-  const precioTotal = (producto.precio + precioAdicional) * cantidad
+  const precioAdicional = sumarDinero(
+    ...seleccionadas.map(opcion => opcion.precio ?? 0)
+  )
+  const precioTotal = multiplicarDinero(
+    sumarDinero(producto.precio || 0, precioAdicional),
+    cantidad
+  )
 
   const handleConfirmar = () => {
+    const grupoFaltante = opciones.find(grupo => (
+      grupo.obligatorio
+      && !seleccionadas.some(opcion => opcion.grupoId === grupo.id)
+    ))
+    if (grupoFaltante) {
+      setError(`Debe seleccionar una opción en el grupo ${grupoFaltante.nombre}.`)
+      return
+    }
     onAgregar(producto, seleccionadas, cantidad)
     onCerrar()
   }
@@ -91,19 +119,25 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
               ) : (
                 opciones.map(grupo => (
                   <div key={grupo.id} className="mb-3">
-                    <label className="form-label fw-semibold">{grupo.nombre}</label>
+                    <label className="form-label fw-semibold">
+                      {grupo.nombre}
+                      {grupo.obligatorio && <span className="text-danger ms-1">*</span>}
+                    </label>
                     <small className="text-muted d-block mb-2">
                       {grupo.permiteMultiple ? 'Puede seleccionar varias' : 'Seleccione una'}
+                      {grupo.obligatorio ? ' · Obligatorio' : ''}
                     </small>
                     <div className="row g-2">
-                      {grupo.opciones.map(opcion => {
+                      {(grupo.opciones || []).map(opcion => {
                         const seleccionada = seleccionadas.find(o => o.id === opcion.id)
+                        const noDisponible = opcion.disponible === false
                         return (
                           <div key={opcion.id} className="col-6">
                             <label
                               className="d-flex align-items-center gap-2 p-2 border rounded"
                               style={{
-                                cursor: 'pointer',
+                                cursor: noDisponible ? 'not-allowed' : 'pointer',
+                                opacity: noDisponible ? 0.55 : 1,
                                 borderColor: seleccionada ? '#1a3c34' : '#dee2e6',
                                 backgroundColor: seleccionada ? '#f2f7f5' : '#fff'
                               }}
@@ -112,14 +146,16 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
                                 type={grupo.permiteMultiple ? 'checkbox' : 'radio'}
                                 name={`opcion-${grupo.id}`}
                                 checked={!!seleccionada}
-                                onChange={() => toggleOpcion(opcion)}
+                                onChange={() => toggleOpcion(grupo, opcion)}
+                                disabled={noDisponible}
                                 className="form-check-input mt-0"
                               />
                               <span className="small">
                                 {opcion.nombre}
-                                {opcion.precio > 0 && (
-                                  <span className="text-muted"> (+${opcion.precio.toLocaleString('es-CO')})</span>
+                                {Number(opcion.precio) > 0 && (
+                                  <span className="text-muted"> (+{formatearDinero(opcion.precio)})</span>
                                 )}
+                                {noDisponible && <span className="text-danger"> · No disponible</span>}
                               </span>
                             </label>
                           </div>
@@ -150,7 +186,7 @@ function ModalPersonalizacion({ producto, onAgregar, onCerrar }) {
                 <div className="text-end">
                   <small className="text-muted d-block">Total</small>
                   <strong style={{ color: '#1a3c34', fontSize: '1.1rem' }}>
-                    ${precioTotal.toLocaleString('es-CO')}
+                    {formatearDinero(precioTotal)}
                   </strong>
                 </div>
               </div>
