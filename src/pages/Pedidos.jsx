@@ -1,26 +1,65 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiRefreshCw, FiSearch, FiInbox, FiCheckCircle, FiXCircle, FiActivity } from 'react-icons/fi'
+import {
+  FiActivity, FiBell, FiCheckCircle, FiChevronDown, FiChevronUp,
+  FiInbox, FiRefreshCw, FiSearch, FiXCircle
+} from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
 import TarjetaPedido from '../components/TarjetaPedido.jsx'
+import ModalPago from '../components/ModalPago.jsx'
 import { usePedidosActivos } from '../hooks/usePedidosActivos.js'
 import { actualizarEstadoPedido } from '../services/pedidos.js'
-import { ESTADOS_ACTIVOS, normalizarEstado, etiquetaEstado } from '../utils/pedidos.js'
+import {
+  actualizarEstadoCocina,
+  listarPedidosCocina,
+  listarPedidosDomicilio,
+  listarPedidosParaLlevar
+} from '../services/serviciosPedido.js'
+import { listarNotificaciones } from '../services/notificaciones.js'
+import {
+  ESTADOS_ACTIVOS, ESTADOS_PEDIDO, normalizarEstado, etiquetaEstado
+} from '../utils/pedidos.js'
 import { colores, tarjeta, radios, btnGhost, estiloBadge, input } from '../styles/tokens.js'
 
-const ROLES_PERMITIDOS = ['MESERO', 'COCINERO', 'ADMINISTRADOR', 'SUPERADMIN']
+const ROLES_PERSONAL = ['MESERO', 'COCINERO', 'ADMINISTRADOR', 'SUPERADMIN']
+const ROLES_COCINA = ['COCINERO', 'ADMINISTRADOR', 'SUPERADMIN']
+
+const TABS = [
+  { id: 'activos', etiqueta: 'Activos', roles: ROLES_PERSONAL },
+  { id: 'cocina', etiqueta: 'Cocina', roles: ROLES_COCINA },
+  { id: 'para-llevar', etiqueta: 'Para llevar', roles: ROLES_PERSONAL },
+  { id: 'domicilios', etiqueta: 'Domicilios', roles: ROLES_PERSONAL }
+]
+
+function transicionCocina(estado) {
+  const normalizado = normalizarEstado(estado)
+  if (normalizado === 'CONFIRMADO') return 'EN_PREPARACION'
+  if (normalizado === 'EN_PREPARACION') return 'LISTO'
+  return null
+}
 
 function Pedidos() {
   const navigate = useNavigate()
   const [currentUser, setCurrentUser] = useState(null)
   const [mesas, setMesas] = useState([])
   const [authLoading, setAuthLoading] = useState(true)
+  const [tab, setTab] = useState('activos')
   const [filtroEstado, setFiltroEstado] = useState('TODOS')
+  const [filtroEstadoServicio, setFiltroEstadoServicio] = useState('')
+  const [filtroPagoServicio, setFiltroPagoServicio] = useState('')
   const [textoBusqueda, setTextoBusqueda] = useState('')
   const [actualizando, setActualizando] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorAccion, setErrorAccion] = useState('')
+  const [pedidosServicio, setPedidosServicio] = useState([])
+  const [cargandoServicio, setCargandoServicio] = useState(false)
+  const [errorServicio, setErrorServicio] = useState('')
+  const [ultimaActualizacionServicio, setUltimaActualizacionServicio] = useState(null)
+  const [pedidoPago, setPedidoPago] = useState(null)
+  const [notificaciones, setNotificaciones] = useState([])
+  const [errorNotificaciones, setErrorNotificaciones] = useState('')
+  const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false)
 
   const {
     pedidos, cargando, error, enTiempoReal, ultimaActualizacion, recargar
@@ -34,7 +73,7 @@ function Pedidos() {
     try {
       const response = await api.get('/api/auth/me')
       const usuario = response.data
-      if (!ROLES_PERMITIDOS.includes(usuario?.rol)) {
+      if (!ROLES_PERSONAL.includes(usuario?.rol)) {
         navigate(usuario?.rol === 'CLIENTE' ? '/menu' : '/login')
         return
       }
@@ -42,6 +81,7 @@ function Pedidos() {
       if (usuario.rol !== 'COCINERO') {
         cargarMesas()
       }
+      cargarNotificaciones()
     } catch {
       navigate('/login')
     } finally {
@@ -57,6 +97,23 @@ function Pedidos() {
       setMesas([])
     }
   }
+
+  const cargarNotificaciones = useCallback(async () => {
+    try {
+      const datos = await listarNotificaciones()
+      setNotificaciones(Array.isArray(datos) ? datos : [])
+      setErrorNotificaciones('')
+    } catch (err) {
+      const estado = err.response?.status
+      if (estado === 401) {
+        setErrorNotificaciones('Tu sesión expiró. Inicia sesión nuevamente.')
+      } else if (estado === 403) {
+        setErrorNotificaciones(err.response?.data?.error || 'No tienes permisos para consultar notificaciones.')
+      } else {
+        setErrorNotificaciones('No se pudieron cargar las notificaciones.')
+      }
+    }
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -74,21 +131,91 @@ function Pedidos() {
     return mapa
   }, [mesas])
 
+  const cargarServicio = useCallback(async ({ silencioso = false } = {}) => {
+    if (tab === 'activos') return
+    if (!silencioso) setCargandoServicio(true)
+    setErrorServicio('')
+    try {
+      const filtros = {
+        estado: filtroEstadoServicio || undefined,
+        pagoEstado: filtroPagoServicio || undefined
+      }
+      let datos
+      if (tab === 'cocina') {
+        datos = await listarPedidosCocina({ estado: filtroEstadoServicio || undefined })
+      } else if (tab === 'para-llevar') {
+        datos = await listarPedidosParaLlevar(filtros)
+      } else {
+        datos = await listarPedidosDomicilio(filtros)
+      }
+      setPedidosServicio(Array.isArray(datos) ? datos : [])
+      setUltimaActualizacionServicio(new Date())
+    } catch (err) {
+      const estado = err.response?.status
+      if (estado === 401) {
+        setErrorServicio('Tu sesión expiró. Inicia sesión nuevamente.')
+      } else if (estado === 403) {
+        setErrorServicio(err.response?.data?.error || 'No tienes permisos para consultar estos pedidos.')
+      } else if (estado === 400) {
+        setErrorServicio(err.response?.data?.error || 'Los filtros seleccionados no son válidos.')
+      } else {
+        setErrorServicio('No se pudieron cargar los pedidos. Revisa la conexión e inténtalo de nuevo.')
+      }
+      setPedidosServicio([])
+    } finally {
+      if (!silencioso) setCargandoServicio(false)
+    }
+  }, [tab, filtroEstadoServicio, filtroPagoServicio])
+
+  useEffect(() => {
+    if (!currentUser || tab === 'activos') return undefined
+    cargarServicio()
+    const intervalo = setInterval(() => cargarServicio({ silencioso: true }), 20000)
+    return () => clearInterval(intervalo)
+  }, [currentUser, tab, cargarServicio])
+
+  const cambiarTab = (nuevoTab) => {
+    if (nuevoTab === tab) return
+    setTab(nuevoTab)
+    setFiltroEstadoServicio('')
+    setFiltroPagoServicio('')
+    setTextoBusqueda('')
+    setSuccessMessage('')
+    setErrorAccion('')
+    setErrorServicio('')
+  }
+
+  const pedidosBase = tab === 'activos' ? pedidos : pedidosServicio
+
   const pedidosFiltrados = useMemo(() => {
     const texto = textoBusqueda.trim().toLowerCase()
-    return pedidos.filter(pedido => {
-      if (filtroEstado !== 'TODOS' && normalizarEstado(pedido.estado) !== filtroEstado) return false
+    return pedidosBase.filter(pedido => {
+      if (tab === 'activos') {
+        if (filtroEstado !== 'TODOS' && normalizarEstado(pedido.estado) !== filtroEstado) return false
+      } else {
+        if (filtroEstadoServicio && normalizarEstado(pedido.estado) !== filtroEstadoServicio) return false
+        if (filtroPagoServicio && (pedido.pagoEstado || 'PENDIENTE') !== filtroPagoServicio) return false
+      }
       if (!texto) return true
       const mesa = nombresMesas[pedido.mesaId] || ''
       return [pedido.numeroSeguimiento, pedido.nombre, pedido.telefono, mesa]
         .filter(Boolean)
         .some(valor => String(valor).toLowerCase().includes(texto))
     })
-  }, [pedidos, filtroEstado, textoBusqueda, nombresMesas])
+  }, [pedidosBase, tab, filtroEstado, filtroEstadoServicio, filtroPagoServicio, textoBusqueda, nombresMesas])
 
   const contarEstado = (valor) => {
     if (valor === 'TODOS') return pedidos.length
     return pedidos.filter(pedido => normalizarEstado(pedido.estado) === valor).length
+  }
+
+  const recargarActual = () => {
+    if (tab === 'activos') {
+      recargar()
+    } else {
+      cargarServicio()
+    }
+    cargarNotificaciones()
   }
 
   const cambiarEstado = async (pedido, estado) => {
@@ -96,9 +223,17 @@ function Pedidos() {
     setActualizando(pedido.id)
     setErrorAccion('')
     try {
-      await actualizarEstadoPedido(pedido.id, estado)
+      if (tab === 'cocina') {
+        await actualizarEstadoCocina(pedido.id, estado)
+      } else {
+        await actualizarEstadoPedido(pedido.id, estado)
+      }
       setSuccessMessage(`${pedido.numeroSeguimiento || 'Pedido'} actualizado a ${etiquetaEstado(estado).toLowerCase()}.`)
-      await recargar()
+      if (tab === 'activos') {
+        await recargar()
+      } else {
+        await cargarServicio({ silencioso: true })
+      }
       setTimeout(() => setSuccessMessage(''), 4000)
     } catch (err) {
       setErrorAccion(err.response?.data?.error || 'No fue posible actualizar el estado del pedido.')
@@ -108,9 +243,27 @@ function Pedidos() {
     }
   }
 
-  const horaActualizacion = ultimaActualizacion
-    ? ultimaActualizacion.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const pagoConfirmado = async (resumen) => {
+    const referencia = resumen?.numeroSeguimiento || pedidoPago?.numeroSeguimiento || 'el pedido'
+    setSuccessMessage(`Pago confirmado para ${referencia}.`)
+    setPedidoPago(null)
+    await cargarNotificaciones()
+    if (tab === 'activos') {
+      await recargar()
+    } else {
+      await cargarServicio({ silencioso: true })
+    }
+    setTimeout(() => setSuccessMessage(''), 4500)
+  }
+
+  const horaActualizacion = (tab === 'activos' ? ultimaActualizacion : ultimaActualizacionServicio)
+    ? (tab === 'activos' ? ultimaActualizacion : ultimaActualizacionServicio)
+      .toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—'
+
+  const cargandoActual = tab === 'activos' ? cargando : cargandoServicio
+  const errorActual = tab === 'activos' ? error : errorServicio
+  const tabsDisponibles = TABS.filter(opcion => opcion.roles.includes(currentUser?.rol))
 
   if (authLoading) {
     return (
@@ -132,34 +285,106 @@ function Pedidos() {
           flexWrap: 'wrap', gap: '12px', marginBottom: '20px'
         }}>
           <div>
-            <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Pedidos activos</h2>
+            <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Pedidos</h2>
             <small style={{ color: colores.textoSuave }}>
-              {pedidos.length === 0 ? 'Sin pedidos en curso' : `${pedidos.length} pedidos en curso`}
+              {pedidosBase.length === 0 ? 'Sin pedidos en esta vista' : `${pedidosBase.length} pedidos en esta vista`}
               {' · '}Actualizado a las {horaActualizacion}
             </small>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => { setMostrarNotificaciones(valor => !valor); cargarNotificaciones() }}
+              style={{ ...btnGhost, minHeight: '40px', position: 'relative' }}
+              aria-expanded={mostrarNotificaciones}
+            >
+              <FiBell style={{ marginRight: '6px' }} />
+              Notificaciones
+              {notificaciones.length > 0 && (
+                <span style={{
+                  marginLeft: '7px', minWidth: '20px', height: '20px', padding: '0 6px',
+                  borderRadius: radios.full, backgroundColor: colores.primario, color: 'white',
+                  fontSize: '11px', fontWeight: 700, display: 'inline-flex',
+                  alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {notificaciones.length}
+                </span>
+              )}
+              {mostrarNotificaciones
+                ? <FiChevronUp style={{ marginLeft: '5px' }} />
+                : <FiChevronDown style={{ marginLeft: '5px' }} />}
+            </button>
             <span style={estiloBadge(
-              enTiempoReal ? colores.exitoFondo : colores.superficie,
-              enTiempoReal ? colores.exitoTexto : colores.textoSuave
+              tab === 'activos' && enTiempoReal ? colores.exitoFondo : colores.superficie,
+              tab === 'activos' && enTiempoReal ? colores.exitoTexto : colores.textoSuave
             )}>
               <span style={{
                 width: '6px', height: '6px', borderRadius: '50%',
-                backgroundColor: enTiempoReal ? colores.exito : colores.textoSuaveClaro
+                backgroundColor: tab === 'activos' && enTiempoReal ? colores.exito : colores.textoSuaveClaro
               }} />
-              {enTiempoReal ? 'Tiempo real' : 'Sincronización cada 15 s'}
+              {tab === 'activos' && enTiempoReal ? 'Tiempo real' : 'Sincronización cada 20 s'}
             </span>
             <button
               type="button"
               className="btn"
-              onClick={recargar}
-              disabled={cargando}
+              onClick={recargarActual}
+              disabled={cargandoActual}
               style={{ ...btnGhost, minHeight: '40px' }}
             >
               <FiRefreshCw style={{ marginRight: '6px' }} />
-              {cargando ? 'Actualizando…' : 'Actualizar'}
+              {cargandoActual ? 'Actualizando…' : 'Actualizar'}
             </button>
           </div>
+        </div>
+
+        {mostrarNotificaciones && (
+          <div style={{ ...tarjeta, padding: '14px 16px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <strong style={{ color: colores.texto, fontSize: '14px' }}>Notificaciones recientes</strong>
+              <small style={{ color: colores.textoSuave }}>{notificaciones.length} en total</small>
+            </div>
+            {errorNotificaciones && (
+              <div role="alert" style={{ color: colores.errorTexto, fontSize: '12.5px', marginBottom: '8px' }}>
+                {errorNotificaciones}
+              </div>
+            )}
+            {!errorNotificaciones && notificaciones.length === 0 && (
+              <small style={{ color: colores.textoSuave }}>No hay notificaciones registradas.</small>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
+              {notificaciones.slice(0, 10).map(notificacion => (
+                <div key={notificacion.id} style={{
+                  backgroundColor: colores.superficie, borderRadius: radios.sm, padding: '9px 11px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                    <strong style={{ color: colores.texto, fontSize: '12.5px' }}>{notificacion.titulo}</strong>
+                    <small style={{ color: colores.textoSuave }}>
+                      {notificacion.fechaCreacion
+                        ? new Date(notificacion.fechaCreacion).toLocaleString('es-CO')
+                        : ''}
+                    </small>
+                  </div>
+                  <small style={{ color: colores.textoSuave, display: 'block', marginTop: '3px' }}>
+                    {notificacion.mensaje}
+                  </small>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+          {tabsDisponibles.map(opcion => (
+            <button
+              key={opcion.id}
+              type="button"
+              onClick={() => cambiarTab(opcion.id)}
+              style={tabEstilo(tab === opcion.id)}
+            >
+              {opcion.etiqueta}
+            </button>
+          ))}
         </div>
 
         {successMessage && (
@@ -172,7 +397,7 @@ function Pedidos() {
           </div>
         )}
 
-        {(errorAccion || error) && (
+        {(errorAccion || errorActual) && (
           <div role="alert" style={{
             ...tarjeta, padding: '12px 16px', marginBottom: '14px',
             backgroundColor: colores.errorFondo, color: colores.errorTexto,
@@ -180,9 +405,9 @@ function Pedidos() {
             gap: '12px', fontSize: '13.5px', flexWrap: 'wrap'
           }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-              <FiXCircle /> {errorAccion || error}
+              <FiXCircle /> {errorAccion || errorActual}
             </span>
-            <button type="button" className="btn" onClick={recargar} style={{ ...btnGhost, minHeight: '36px' }}>
+            <button type="button" className="btn" onClick={recargarActual} style={{ ...btnGhost, minHeight: '36px' }}>
               Reintentar
             </button>
           </div>
@@ -192,25 +417,57 @@ function Pedidos() {
           ...tarjeta, padding: '14px 16px', marginBottom: '18px',
           display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center'
         }}>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setFiltroEstado('TODOS')}
-              style={chipEstilo(filtroEstado === 'TODOS')}
-            >
-              Todos ({contarEstado('TODOS')})
-            </button>
-            {ESTADOS_ACTIVOS.map(estado => (
+          {tab === 'activos' ? (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <button
-                key={estado.valor}
                 type="button"
-                onClick={() => setFiltroEstado(estado.valor)}
-                style={chipEstilo(filtroEstado === estado.valor)}
+                onClick={() => setFiltroEstado('TODOS')}
+                style={chipEstilo(filtroEstado === 'TODOS')}
               >
-                {estado.etiqueta} ({contarEstado(estado.valor)})
+                Todos ({contarEstado('TODOS')})
               </button>
-            ))}
-          </div>
+              {ESTADOS_ACTIVOS.map(estado => (
+                <button
+                  key={estado.valor}
+                  type="button"
+                  onClick={() => setFiltroEstado(estado.valor)}
+                  style={chipEstilo(filtroEstado === estado.valor)}
+                >
+                  {estado.etiqueta} ({contarEstado(estado.valor)})
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: colores.textoSuave, fontSize: '12.5px' }}>
+                Estado
+                <select
+                  value={filtroEstadoServicio}
+                  onChange={(event) => setFiltroEstadoServicio(event.target.value)}
+                  style={{ ...input, minHeight: '38px', height: '38px', padding: '0 8px' }}
+                >
+                  <option value="">Todos</option>
+                  {ESTADOS_PEDIDO.map(estado => (
+                    <option key={estado.valor} value={estado.valor}>{estado.etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              {tab !== 'cocina' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: colores.textoSuave, fontSize: '12.5px' }}>
+                  Pago
+                  <select
+                    value={filtroPagoServicio}
+                    onChange={(event) => setFiltroPagoServicio(event.target.value)}
+                    style={{ ...input, minHeight: '38px', height: '38px', padding: '0 8px' }}
+                  >
+                    <option value="">Todos</option>
+                    <option value="PENDIENTE">Pendiente</option>
+                    <option value="PAGADO">Pagado</option>
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
           <div className="ms-md-auto" style={{ position: 'relative', flex: '1 1 240px', maxWidth: '320px' }}>
             <FiSearch style={{ position: 'absolute', left: '12px', top: '14px', color: colores.textoSuaveClaro }} />
             <input
@@ -224,16 +481,28 @@ function Pedidos() {
           </div>
         </div>
 
-        {cargando && pedidos.length === 0 ? (
+        {cargandoActual && pedidosBase.length === 0 ? (
           <div style={{ ...tarjeta, padding: '56px 24px', textAlign: 'center', color: colores.textoSuave }}>
             <div className="spinner-border" style={{ color: colores.primario }}></div>
-            <div style={{ marginTop: '10px', fontSize: '13px' }}>Cargando pedidos activos…</div>
+            <div style={{ marginTop: '10px', fontSize: '13px' }}>Cargando pedidos…</div>
           </div>
-        ) : pedidos.length === 0 ? (
+        ) : pedidosBase.length === 0 ? (
           <div style={{ ...tarjeta, padding: '56px 24px', textAlign: 'center', color: colores.textoSuave }}>
             <FiInbox style={{ fontSize: '2rem', color: colores.textoSuaveClaro }} />
-            <div style={{ fontWeight: 700, color: colores.texto, marginTop: '8px' }}>No hay pedidos activos</div>
-            <small>Los pedidos entregados o cancelados dejan de aparecer en esta lista.</small>
+            <div style={{ fontWeight: 700, color: colores.texto, marginTop: '8px' }}>
+              {tab === 'cocina'
+                ? 'No hay pedidos en cocina'
+                : tab === 'para-llevar'
+                  ? 'No hay pedidos para llevar'
+                  : tab === 'domicilios'
+                    ? 'No hay pedidos a domicilio'
+                    : 'No hay pedidos activos'}
+            </div>
+            <small>
+              {tab === 'activos'
+                ? 'Los pedidos entregados o cancelados dejan de aparecer en esta lista.'
+                : 'La vista se actualiza automáticamente cada 20 segundos.'}
+            </small>
           </div>
         ) : pedidosFiltrados.length === 0 ? (
           <div style={{ ...tarjeta, padding: '56px 24px', textAlign: 'center', color: colores.textoSuave }}>
@@ -249,8 +518,13 @@ function Pedidos() {
                   pedido={pedido}
                   nombreMesa={nombresMesas[pedido.mesaId] || ''}
                   onCambiarEstado={cambiarEstado}
+                  onGestionarPago={tab === 'cocina'
+                    ? undefined
+                    : (seleccionado) => setPedidoPago(seleccionado)}
                   actualizando={actualizando === pedido.id}
-                  permitirAcciones
+                  permitirAcciones={tab === 'cocina' ? ROLES_COCINA.includes(currentUser.rol) : true}
+                  permitirCancelar={tab !== 'cocina'}
+                  siguientePersonalizado={tab === 'cocina' ? transicionCocina(pedido.estado) : undefined}
                 />
               </div>
             ))}
@@ -262,11 +536,22 @@ function Pedidos() {
           color: colores.textoSuave, fontSize: '12px', marginTop: '18px'
         }}>
           <FiActivity />
-          {enTiempoReal
-            ? 'Los cambios de estado se reciben en tiempo real desde el servidor.'
-            : 'La lista se sincroniza automáticamente cada 15 segundos.'}
+          {tab === 'activos'
+            ? (enTiempoReal
+              ? 'Los cambios de estado se reciben en tiempo real desde el servidor.'
+              : 'La lista se sincroniza automáticamente cada 15 segundos.')
+            : 'La vista de servicio se sincroniza automáticamente cada 20 segundos.'}
         </div>
       </div>
+
+      {pedidoPago && (
+        <ModalPago
+          pedido={pedidoPago}
+          rol={currentUser.rol}
+          onCerrar={() => setPedidoPago(null)}
+          onPagado={pagoConfirmado}
+        />
+      )}
     </div>
   )
 }
@@ -281,6 +566,20 @@ function chipEstilo(activo) {
     color: activo ? '#FFF' : colores.texto,
     fontWeight: 600,
     fontSize: '12.5px',
+    cursor: 'pointer'
+  }
+}
+
+function tabEstilo(activo) {
+  return {
+    minHeight: '40px',
+    padding: '0 18px',
+    borderRadius: radios.sm,
+    border: activo ? `1px solid ${colores.primario}` : `1px solid ${colores.borde}`,
+    backgroundColor: activo ? colores.primario : colores.tarjeta,
+    color: activo ? '#FFF' : colores.texto,
+    fontWeight: 700,
+    fontSize: '13px',
     cursor: 'pointer'
   }
 }

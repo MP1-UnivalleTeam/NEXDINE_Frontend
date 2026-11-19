@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { FiArrowLeft, FiPackage } from 'react-icons/fi'
+import { FiArrowLeft, FiPackage, FiRefreshCw } from 'react-icons/fi'
+import api from '../services/api.js'
+import PagoPedido from '../components/PagoPedido.jsx'
 import { obtenerResumenPedido } from '../services/pedidos.js'
+import { obtenerMensajeError } from '../services/mensajes.js'
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
 import { etiquetaEstado } from '../utils/pedidos.js'
-import { colores, tarjeta } from '../styles/tokens.js'
+import { colores, tarjeta, btnPrimario, btnGhost } from '../styles/tokens.js'
 
 const dps = (valor) => Number(valor ?? 0).toLocaleString('es-CO')
 
@@ -31,38 +34,52 @@ function importeItem(item) {
 /**
  * RF052 — Resumen detallado de cuenta.
  *
- * Heurísticas de Nielsen:
- *   · Visibilidad del estado: loading, error y datos claros.
- *   · Control y libertad: volver a editar sin perder datos.
- *   · Consistencia: mismos colores y estilos del resto de la app.
- *   · Reconocimiento: desglose completo visible de un vistazo.
+ * El desglose completo proviene del backend, incluida la tasa aplicada al
+ * pedido. Los pedidos históricos muestran la tasa con la que fueron creados,
+ * no la tasa configurada actualmente.
  */
 function ResumenPedido() {
   const navigate = useNavigate()
   const { pedidoId } = useParams()
   const [resumen, setResumen] = useState(null)
+  const [rol, setRol] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    cargarResumen()
-  }, [pedidoId])
-
-  const cargarResumen = async () => {
+  const cargarResumen = useCallback(async () => {
+    setLoading(true)
+    setError('')
     try {
       const data = await obtenerResumenPedido(pedidoId)
       setResumen(data)
-      setError('')
     } catch (err) {
       if (err.response?.status === 404) {
-        setError('Pedido no encontrado. Verifique el número de seguimiento.')
+        setError('Pedido no encontrado. Verifique el número de seguimiento o su sesión.')
+      } else if (err.response?.status === 403) {
+        setError(obtenerMensajeError(err, 'No tiene permisos para consultar este pedido.'))
       } else {
-        setError('No se pudo cargar el resumen. Intente nuevamente.')
+        setError(obtenerMensajeError(err, 'No se pudo cargar el resumen. Intente nuevamente.'))
       }
     } finally {
       setLoading(false)
     }
-  }
+  }, [pedidoId])
+
+  useEffect(() => {
+    cargarResumen()
+  }, [cargarResumen])
+
+  useEffect(() => {
+    let cancelado = false
+    api.get('/api/auth/me')
+      .then(response => {
+        if (!cancelado) setRol(response.data?.rol || null)
+      })
+      .catch(() => {
+        // Invitado sin sesión: puede consultar su pedido y elegir método de pago.
+      })
+    return () => { cancelado = true }
+  }, [])
 
   if (loading) {
     return (
@@ -79,13 +96,14 @@ function ResumenPedido() {
         <div className="alert alert-danger">
           <i className="fa-solid fa-circle-exclamation me-2"></i>{error}
         </div>
-        <button
-          className="btn btn-sm"
-          style={{ backgroundColor: colores.primario, color: 'white' }}
-          onClick={() => navigate(-1)}
-        >
-          <FiArrowLeft style={{ marginRight: '5px' }} /> Volver
-        </button>
+        <div className="d-flex gap-2 flex-wrap">
+          <button className="btn btn-sm" style={{ ...btnPrimario, minHeight: '40px' }} onClick={cargarResumen}>
+            <FiRefreshCw style={{ marginRight: '5px' }} /> Reintentar
+          </button>
+          <button className="btn btn-sm" style={{ ...btnGhost, minHeight: '40px' }} onClick={() => navigate(-1)}>
+            <FiArrowLeft style={{ marginRight: '5px' }} /> Volver
+          </button>
+        </div>
       </div>
     )
   }
@@ -94,17 +112,22 @@ function ResumenPedido() {
 
   return (
     <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-2">
+      <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <h2 className="mb-0">
           <FiPackage style={{ marginRight: '8px' }} />
           Resumen del pedido
         </h2>
-        <button
-          className="btn btn-sm btn-outline-secondary"
-          onClick={() => navigate(obtenerContextoMenu() || '/menu')}
-        >
-          <FiArrowLeft style={{ marginRight: '5px' }} /> Volver al menú
-        </button>
+        <div className="d-flex gap-2 flex-wrap">
+          <button className="btn btn-sm btn-outline-secondary" onClick={cargarResumen}>
+            <FiRefreshCw style={{ marginRight: '5px' }} /> Actualizar
+          </button>
+          <button
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => navigate(obtenerContextoMenu() || '/menu')}
+          >
+            <FiArrowLeft style={{ marginRight: '5px' }} /> Volver al menú
+          </button>
+        </div>
       </div>
 
       {resumen.numeroSeguimiento && (
@@ -123,40 +146,33 @@ function ResumenPedido() {
             <div className="card-body">
               <h6 className="mb-3">Productos</h6>
               {(Array.isArray(resumen.items) ? resumen.items : []).map((item, idx) => {
-                const personalizaciones = typeof item?.personalizaciones === 'string'
-                  ? item.personalizaciones
-                  : Array.isArray(item?.personalizaciones)
-                    ? item.personalizaciones
-                      .map(v => (v == null ? '' : String(v)))
-                      .filter(Boolean)
-                      .join(', ')
-                    : ''
+                const personalizaciones = textoPersonalizaciones(item)
                 return (
-                <div key={idx} className="d-flex justify-content-between align-items-start mb-3 pb-3 border-bottom">
-                  <div>
-                    <strong>{item.cantidad}x {item.nombre}</strong>
-                    {personalizaciones && (
-                      <small className="text-muted d-block">
-                        <i className="fa-solid fa-pen me-1"></i>
-                        {personalizaciones}
-                      </small>
-                    )}
-                    {Number(item?.adicionalOpciones) > 0 && (
-                      <small className="text-muted d-block">
-                        Adicionales: ${dps(item.adicionalOpciones)} por unidad
-                      </small>
-                    )}
-                    {item.observaciones && (
-                      <small className="text-muted d-block">
-                        <i className="fa-solid fa-note-sticky me-1"></i>
-                        {item.observaciones}
-                      </small>
-                    )}
+                  <div key={idx} className="d-flex justify-content-between align-items-start mb-3 pb-3 border-bottom">
+                    <div>
+                      <strong>{item.cantidad}x {item.nombre}</strong>
+                      {personalizaciones && (
+                        <small className="text-muted d-block">
+                          <i className="fa-solid fa-pen me-1"></i>
+                          {personalizaciones}
+                        </small>
+                      )}
+                      {Number(item?.adicionalOpciones) > 0 && (
+                        <small className="text-muted d-block">
+                          Adicionales: ${dps(item.adicionalOpciones)} por unidad
+                        </small>
+                      )}
+                      {item.observaciones && (
+                        <small className="text-muted d-block">
+                          <i className="fa-solid fa-note-sticky me-1"></i>
+                          {item.observaciones}
+                        </small>
+                      )}
+                    </div>
+                    <span className="text-end">
+                      ${dps(importeItem(item))}
+                    </span>
                   </div>
-                  <span className="text-end">
-                    ${dps(importeItem(item))}
-                  </span>
-                </div>
                 )
               })}
             </div>
@@ -183,12 +199,10 @@ function ResumenPedido() {
                 </div>
               )}
 
-              {(Number(resumen.cargos) > 0) && (
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Cargos</span>
-                  <span>${dps(resumen.cargos)}</span>
-                </div>
-              )}
+              <div className="d-flex justify-content-between mb-2">
+                <span className="text-muted">Base gravable</span>
+                <span>${dps(resumen.baseGravable)}</span>
+              </div>
 
               <div className="d-flex justify-content-between mb-2">
                 <span className="text-muted">
@@ -223,6 +237,23 @@ function ResumenPedido() {
               </div>
             </div>
           </div>
+
+          <div className="mt-3">
+            {rol === 'CLIENTE' ? (
+              <div style={{ ...tarjeta, padding: '14px', color: colores.textoSuave, fontSize: '13px' }}>
+                El pago de este pedido lo gestiona el personal autorizado del restaurante.
+              </div>
+            ) : (
+              <PagoPedido
+                pedido={resumen}
+                rol={rol}
+                compacto
+                onPagado={(actualizado) => {
+                  if (actualizado?.id) setResumen(actualizado)
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -230,7 +261,7 @@ function ResumenPedido() {
       <div className="mt-4 d-flex gap-2 flex-wrap">
         <button
           className="btn flex-grow-1 flex-md-grow-0"
-          style={{ backgroundColor: colores.primario, color: 'white' }}
+          style={{ ...btnPrimario, minHeight: '44px' }}
           onClick={() => navigate('/carrito')}
         >
           <FiArrowLeft style={{ marginRight: '5px' }} /> Volver a editar

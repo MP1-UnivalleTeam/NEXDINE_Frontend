@@ -30,6 +30,11 @@ const PREDEFINIDOS = {
  * @returns {string} Mensaje comprensible para el usuario
  */
 export function obtenerMensajeError(err, fallback = '') {
+  // Tiempo de espera agotado (axios: ECONNABORTED)
+  if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '')) {
+    return 'El servidor tardó demasiado en responder. Intente nuevamente.'
+  }
+
   // Sin respuesta del servidor: error de red
   if (!err || !err.response) {
     return err?.message === 'Network Error'

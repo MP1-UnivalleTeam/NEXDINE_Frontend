@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   FiPlus, FiX, FiCheckCircle, FiXCircle, FiGrid, FiLink2, FiCopy, FiExternalLink,
@@ -73,6 +73,22 @@ function Mesas() {
     window.addEventListener('keydown', manejarEscape)
     return () => window.removeEventListener('keydown', manejarEscape)
   }, [showCreateModal, qrMesa])
+
+  // RF049 — El estado de la mesa cambia cuando un pedido se crea, avanza o se
+  // paga. No se añade polling propio: `usePedidosActivos` ya entrega los
+  // cambios (SSE con respaldo). Solo se recarga la lista de mesas cuando la
+  // firma de pedidos activos cambia de verdad.
+  const firmaPedidosRef = useRef('')
+  useEffect(() => {
+    if (!currentUser) return
+    const firma = pedidos
+      .map(pedido => `${pedido.id}:${pedido.estado}:${pedido.pagoEstado || ''}`)
+      .sort()
+      .join('|')
+    if (firma === firmaPedidosRef.current) return
+    firmaPedidosRef.current = firma
+    loadMesas()
+  }, [pedidos, currentUser])
 
   const checkAuth = async () => {
     try {
@@ -332,6 +348,7 @@ function Mesas() {
     ? `${window.location.origin}/menu?mesa=${encodeURIComponent(qrMesa.codigo)}`
     : ''
   const mesasActivas = conteo('activas')
+  const mesasOcupadas = mesas.filter(mesa => mesa.estado === 'OCUPADA').length
 
   return (
     <div className="nexdine-shell" style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
@@ -351,7 +368,7 @@ function Mesas() {
                 ? (esMesero ? 'Sin mesas activas asignadas' : 'Sin mesas registradas')
                 : esMesero
                   ? `${mesas.length} mesas activas disponibles para atender`
-                  : `${mesasActivas} de ${mesas.length} mesas activas`}
+                  : `${mesasActivas} de ${mesas.length} mesas activas · ${mesasOcupadas} ocupadas`}
             </small>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
@@ -737,6 +754,19 @@ function Mesas() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                       <span style={{ color: colores.textoSuave }}>Identificador</span>
                       <code style={{ color: colores.texto, fontWeight: 600, fontSize: '12px' }}>{mesa.codigo}</code>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                      <span style={{ color: colores.textoSuave }}>Estado de la mesa</span>
+                      <span style={estiloBadge(
+                        mesa.estado === 'OCUPADA' ? colores.advertenciaFondo : colores.mint,
+                        mesa.estado === 'OCUPADA' ? colores.advertenciaTexto : colores.primario
+                      )}>
+                        <span style={{
+                          width: '6px', height: '6px', borderRadius: '50%',
+                          backgroundColor: mesa.estado === 'OCUPADA' ? colores.advertencia : colores.exito
+                        }} />
+                        {mesa.estado === 'OCUPADA' ? 'Ocupada' : 'Libre'}
+                      </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                       <span style={{ color: colores.textoSuave }}>Pedidos QR</span>

@@ -77,7 +77,8 @@ function Menu() {
 
   // Carrito
   const {
-    agregarItem, totalItems, subtotal, setSucursal, setTasaImpuesto, sucursal
+    agregarItem, totalItems, subtotal, setSucursal, setTasaImpuesto, sucursal,
+    setTipoServicio: setTipoServicioCarrito
   } = useCarrito()
 
   useEffect(() => {
@@ -208,6 +209,7 @@ function Menu() {
     }
 
     setTipoServicio(tipo)
+    setTipoServicioCarrito(tipo)
     sessionStorage.setItem(CLAVE_TIPO_UI, tipo)
   }
 

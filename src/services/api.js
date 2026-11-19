@@ -4,7 +4,8 @@ export const API_URL = import.meta.env.VITE_API_URL || ''
 
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: true
+  withCredentials: true,
+  timeout: 30000
 })
 
 export default api

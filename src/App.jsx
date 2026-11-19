@@ -10,6 +10,7 @@ import PedidoInvitado from './pages/PedidoInvitado.jsx'
 import ResumenPedido from './pages/ResumenPedido.jsx'
 import Pedidos from './pages/Pedidos.jsx'
 import Favoritos from './pages/Favoritos.jsx'
+import Impuestos from './pages/Impuestos.jsx'
 import { CarritoProvider } from './context/CarritoContext.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
@@ -29,6 +30,7 @@ function App() {
             <Route path="/pedidos" element={<Pedidos />} />
             <Route path="/favoritos" element={<Favoritos />} />
             <Route path="/sucursales" element={<Sucursales />} />
+            <Route path="/impuestos" element={<Impuestos />} />
             <Route path="/carrito" element={<Carrito />} />
             <Route path="/pedido" element={<PedidoInvitado />} />
             <Route path="/resumen/:pedidoId" element={<ResumenPedido />} />

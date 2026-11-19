@@ -33,17 +33,17 @@ function PedidoInvitado() {
   const navigate = useNavigate()
   const {
     items, subtotal, descuento, impuestos, propina, cupon, total,
-    sucursal, setSucursal, vaciarCarrito
+    tipoServicio, sucursal, setSucursal, vaciarCarrito
   } = useCarrito()
   const [sucursalesDisponibles] = useState(() => obtenerSucursalesDisponibles())
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     nombre: '',
     telefono: '',
-    tipoServicio: 'DOMICILIO',
+    tipoServicio: tipoServicio || 'DOMICILIO',
     direccion: '',
     referencia: ''
-  })
+  }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [pedidoConfirmado, setPedidoConfirmado] = useState(null)

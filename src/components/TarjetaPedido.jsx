@@ -1,8 +1,9 @@
-import { FiCheckCircle, FiClock, FiXCircle, FiUser, FiPhone, FiMapPin, FiHash } from 'react-icons/fi'
+import { FiCheckCircle, FiClock, FiCreditCard, FiXCircle, FiUser, FiPhone, FiMapPin, FiHash } from 'react-icons/fi'
 import { colores, tarjeta, radios, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 import { formatearDinero } from '../utils/dinero.js'
 import {
   infoEstado,
+  normalizarEstado,
   etiquetaTipoServicio,
   siguienteEstado,
   esEstadoFinal,
@@ -13,16 +14,23 @@ function TarjetaPedido({
   pedido,
   nombreMesa = '',
   onCambiarEstado,
+  onGestionarPago,
   actualizando = false,
   permitirAcciones = false,
+  permitirCancelar = true,
+  siguientePersonalizado,
   compacto = false
 }) {
   if (!pedido) return null
 
   const estado = infoEstado(pedido.estado)
-  const siguiente = siguienteEstado(pedido.estado)
+  const siguiente = siguientePersonalizado !== undefined
+    ? siguientePersonalizado
+    : siguienteEstado(pedido.estado)
   const items = Array.isArray(pedido.items) ? pedido.items : []
   const finalizado = esEstadoFinal(pedido.estado)
+  const cancelado = normalizarEstado(pedido.estado) === 'CANCELADO'
+  const pagado = pedido.pagoEstado === 'PAGADO'
   const totalProductos = contarProductos(pedido)
 
   const cambiar = (nuevoEstado) => {
@@ -52,14 +60,22 @@ function TarjetaPedido({
             {nombreMesa ? ` · ${nombreMesa}` : ''}
           </div>
         </div>
-        <span style={estiloBadge(estado.fondo, estado.texto)} aria-live="polite">
-          {estado.valor === 'EN_PREPARACION' || estado.valor === 'PENDIENTE'
-            ? <FiClock size={12} />
-            : estado.valor === 'CANCELADO'
-              ? <FiXCircle size={12} />
-              : <FiCheckCircle size={12} />}
-          {estado.etiqueta}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px' }}>
+          <span style={estiloBadge(estado.fondo, estado.texto)} aria-live="polite">
+            {estado.valor === 'EN_PREPARACION' || estado.valor === 'PENDIENTE'
+              ? <FiClock size={12} />
+              : estado.valor === 'CANCELADO'
+                ? <FiXCircle size={12} />
+                : <FiCheckCircle size={12} />}
+            {estado.etiqueta}
+          </span>
+          <span style={estiloBadge(
+            pagado ? colores.exitoFondo : colores.advertenciaFondo,
+            pagado ? colores.exitoTexto : colores.advertenciaTexto
+          )}>
+            {pagado ? 'Pagado' : (pedido.pagoEstado ? 'Pago pendiente' : 'Sin pago')}
+          </span>
+        </div>
       </div>
 
       <div style={{
@@ -154,27 +170,43 @@ function TarjetaPedido({
         </div>
       </div>
 
-      {permitirAcciones && !finalizado && (
+      {onGestionarPago && !cancelado && (
+        <button
+          type="button"
+          className="btn w-100"
+          onClick={() => onGestionarPago(pedido)}
+          style={{ ...btnGhost, minHeight: '40px', fontSize: '13px', marginTop: '12px' }}
+        >
+          <FiCreditCard style={{ marginRight: '6px' }} />
+          {pagado ? 'Ver pago' : 'Gestionar pago'}
+        </button>
+      )}
+
+      {permitirAcciones && !finalizado && (siguiente || permitirCancelar) && (
         <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className="btn flex-grow-1"
-            disabled={actualizando || !siguiente}
-            onClick={() => cambiar(siguiente)}
-            style={{ ...btnPrimario, minHeight: '40px', fontSize: '13px' }}
-          >
-            <FiCheckCircle style={{ marginRight: '5px' }} />
-            {actualizando ? 'Actualizando…' : `Pasar a ${infoEstado(siguiente).etiqueta.toLowerCase()}`}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={actualizando}
-            onClick={() => cambiar('CANCELADO')}
-            style={{ ...btnGhost, minHeight: '40px', fontSize: '13px', color: colores.errorTexto }}
-          >
-            <FiXCircle style={{ marginRight: '5px' }} /> Cancelar
-          </button>
+          {siguiente && (
+            <button
+              type="button"
+              className="btn flex-grow-1"
+              disabled={actualizando}
+              onClick={() => cambiar(siguiente)}
+              style={{ ...btnPrimario, minHeight: '40px', fontSize: '13px' }}
+            >
+              <FiCheckCircle style={{ marginRight: '5px' }} />
+              {actualizando ? 'Actualizando…' : `Pasar a ${infoEstado(siguiente).etiqueta.toLowerCase()}`}
+            </button>
+          )}
+          {permitirCancelar && (
+            <button
+              type="button"
+              className="btn"
+              disabled={actualizando}
+              onClick={() => cambiar('CANCELADO')}
+              style={{ ...btnGhost, minHeight: '40px', fontSize: '13px', color: colores.errorTexto }}
+            >
+              <FiXCircle style={{ marginRight: '5px' }} /> Cancelar
+            </button>
+          )}
         </div>
       )}
 

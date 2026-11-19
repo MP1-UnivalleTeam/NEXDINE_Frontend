@@ -158,6 +158,13 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
                 </a>
               </li>
             )}
+            {esSuperadmin && (
+              <li className="nav-item">
+                <a href="/impuestos" className="nav-link" style={estilo('/impuestos')}>
+                  <i className="fa-solid fa-percent"></i> Impuestos
+                </a>
+              </li>
+            )}
             <li className="nav-item">
               <a href="/pedidos" className="nav-link" style={estilo('/pedidos')}>
                 <i className="fa-solid fa-receipt"></i> Pedidos
