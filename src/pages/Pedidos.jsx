@@ -10,16 +10,11 @@ import TarjetaPedido from '../components/TarjetaPedido.jsx'
 import ModalPago from '../components/ModalPago.jsx'
 import { usePedidosActivos } from '../hooks/usePedidosActivos.js'
 import { actualizarEstadoPedido } from '../services/pedidos.js'
-import {
-  actualizarEstadoCocina,
-  listarPedidosCocina,
-  listarPedidosDomicilio,
-  listarPedidosParaLlevar
-} from '../services/serviciosPedido.js'
 import { listarNotificaciones } from '../services/notificaciones.js'
 import {
   ESTADOS_ACTIVOS, ESTADOS_PEDIDO, normalizarEstado, etiquetaEstado
 } from '../utils/pedidos.js'
+import { normalizarEstadoPago } from '../utils/pagos.js'
 import { colores, tarjeta, radios, btnGhost, estiloBadge, input } from '../styles/tokens.js'
 
 const ROLES_PERSONAL = ['MESERO', 'COCINERO', 'ADMINISTRADOR', 'SUPERADMIN']
@@ -52,10 +47,6 @@ function Pedidos() {
   const [actualizando, setActualizando] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorAccion, setErrorAccion] = useState('')
-  const [pedidosServicio, setPedidosServicio] = useState([])
-  const [cargandoServicio, setCargandoServicio] = useState(false)
-  const [errorServicio, setErrorServicio] = useState('')
-  const [ultimaActualizacionServicio, setUltimaActualizacionServicio] = useState(null)
   const [pedidoPago, setPedidoPago] = useState(null)
   const [notificaciones, setNotificaciones] = useState([])
   const [errorNotificaciones, setErrorNotificaciones] = useState('')
@@ -131,49 +122,6 @@ function Pedidos() {
     return mapa
   }, [mesas])
 
-  const cargarServicio = useCallback(async ({ silencioso = false } = {}) => {
-    if (tab === 'activos') return
-    if (!silencioso) setCargandoServicio(true)
-    setErrorServicio('')
-    try {
-      const filtros = {
-        estado: filtroEstadoServicio || undefined,
-        pagoEstado: filtroPagoServicio || undefined
-      }
-      let datos
-      if (tab === 'cocina') {
-        datos = await listarPedidosCocina({ estado: filtroEstadoServicio || undefined })
-      } else if (tab === 'para-llevar') {
-        datos = await listarPedidosParaLlevar(filtros)
-      } else {
-        datos = await listarPedidosDomicilio(filtros)
-      }
-      setPedidosServicio(Array.isArray(datos) ? datos : [])
-      setUltimaActualizacionServicio(new Date())
-    } catch (err) {
-      const estado = err.response?.status
-      if (estado === 401) {
-        setErrorServicio('Tu sesión expiró. Inicia sesión nuevamente.')
-      } else if (estado === 403) {
-        setErrorServicio(err.response?.data?.error || 'No tienes permisos para consultar estos pedidos.')
-      } else if (estado === 400) {
-        setErrorServicio(err.response?.data?.error || 'Los filtros seleccionados no son válidos.')
-      } else {
-        setErrorServicio('No se pudieron cargar los pedidos. Revisa la conexión e inténtalo de nuevo.')
-      }
-      setPedidosServicio([])
-    } finally {
-      if (!silencioso) setCargandoServicio(false)
-    }
-  }, [tab, filtroEstadoServicio, filtroPagoServicio])
-
-  useEffect(() => {
-    if (!currentUser || tab === 'activos') return undefined
-    cargarServicio()
-    const intervalo = setInterval(() => cargarServicio({ silencioso: true }), 20000)
-    return () => clearInterval(intervalo)
-  }, [currentUser, tab, cargarServicio])
-
   const cambiarTab = (nuevoTab) => {
     if (nuevoTab === tab) return
     setTab(nuevoTab)
@@ -182,10 +130,20 @@ function Pedidos() {
     setTextoBusqueda('')
     setSuccessMessage('')
     setErrorAccion('')
-    setErrorServicio('')
   }
 
-  const pedidosBase = tab === 'activos' ? pedidos : pedidosServicio
+  const pedidosBase = useMemo(() => {
+    if (tab === 'cocina') {
+      return pedidos.filter(pedido => ['CONFIRMADO', 'EN_PREPARACION'].includes(normalizarEstado(pedido.estado)))
+    }
+    if (tab === 'para-llevar') {
+      return pedidos.filter(pedido => normalizarEstado(pedido.tipoServicio) === 'PARA_LLEVAR')
+    }
+    if (tab === 'domicilios') {
+      return pedidos.filter(pedido => normalizarEstado(pedido.tipoServicio) === 'DOMICILIO')
+    }
+    return pedidos
+  }, [pedidos, tab])
 
   const pedidosFiltrados = useMemo(() => {
     const texto = textoBusqueda.trim().toLowerCase()
@@ -194,7 +152,7 @@ function Pedidos() {
         if (filtroEstado !== 'TODOS' && normalizarEstado(pedido.estado) !== filtroEstado) return false
       } else {
         if (filtroEstadoServicio && normalizarEstado(pedido.estado) !== filtroEstadoServicio) return false
-        if (filtroPagoServicio && (pedido.pagoEstado || 'PENDIENTE') !== filtroPagoServicio) return false
+        if (filtroPagoServicio && normalizarEstadoPago(pedido.pagoEstado) !== filtroPagoServicio) return false
       }
       if (!texto) return true
       const mesa = nombresMesas[pedido.mesaId] || ''
@@ -205,16 +163,12 @@ function Pedidos() {
   }, [pedidosBase, tab, filtroEstado, filtroEstadoServicio, filtroPagoServicio, textoBusqueda, nombresMesas])
 
   const contarEstado = (valor) => {
-    if (valor === 'TODOS') return pedidos.length
-    return pedidos.filter(pedido => normalizarEstado(pedido.estado) === valor).length
+    if (valor === 'TODOS') return pedidosBase.length
+    return pedidosBase.filter(pedido => normalizarEstado(pedido.estado) === valor).length
   }
 
   const recargarActual = () => {
-    if (tab === 'activos') {
-      recargar()
-    } else {
-      cargarServicio()
-    }
+    recargar()
     cargarNotificaciones()
   }
 
@@ -223,17 +177,9 @@ function Pedidos() {
     setActualizando(pedido.id)
     setErrorAccion('')
     try {
-      if (tab === 'cocina') {
-        await actualizarEstadoCocina(pedido.id, estado)
-      } else {
-        await actualizarEstadoPedido(pedido.id, estado)
-      }
+      await actualizarEstadoPedido(pedido.id, estado)
       setSuccessMessage(`${pedido.numeroSeguimiento || 'Pedido'} actualizado a ${etiquetaEstado(estado).toLowerCase()}.`)
-      if (tab === 'activos') {
-        await recargar()
-      } else {
-        await cargarServicio({ silencioso: true })
-      }
+      await recargar()
       setTimeout(() => setSuccessMessage(''), 4000)
     } catch (err) {
       setErrorAccion(err.response?.data?.error || 'No fue posible actualizar el estado del pedido.')
@@ -248,21 +194,14 @@ function Pedidos() {
     setSuccessMessage(`Pago confirmado para ${referencia}.`)
     setPedidoPago(null)
     await cargarNotificaciones()
-    if (tab === 'activos') {
-      await recargar()
-    } else {
-      await cargarServicio({ silencioso: true })
-    }
+    await recargar()
     setTimeout(() => setSuccessMessage(''), 4500)
   }
 
-  const horaActualizacion = (tab === 'activos' ? ultimaActualizacion : ultimaActualizacionServicio)
-    ? (tab === 'activos' ? ultimaActualizacion : ultimaActualizacionServicio)
-      .toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const horaActualizacion = ultimaActualizacion
+    ? ultimaActualizacion.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—'
 
-  const cargandoActual = tab === 'activos' ? cargando : cargandoServicio
-  const errorActual = tab === 'activos' ? error : errorServicio
   const tabsDisponibles = TABS.filter(opcion => opcion.roles.includes(currentUser?.rol))
 
   if (authLoading) {
@@ -316,24 +255,24 @@ function Pedidos() {
                 : <FiChevronDown style={{ marginLeft: '5px' }} />}
             </button>
             <span style={estiloBadge(
-              tab === 'activos' && enTiempoReal ? colores.exitoFondo : colores.superficie,
-              tab === 'activos' && enTiempoReal ? colores.exitoTexto : colores.textoSuave
+              enTiempoReal ? colores.exitoFondo : colores.superficie,
+              enTiempoReal ? colores.exitoTexto : colores.textoSuave
             )}>
               <span style={{
                 width: '6px', height: '6px', borderRadius: '50%',
-                backgroundColor: tab === 'activos' && enTiempoReal ? colores.exito : colores.textoSuaveClaro
+                backgroundColor: enTiempoReal ? colores.exito : colores.textoSuaveClaro
               }} />
-              {tab === 'activos' && enTiempoReal ? 'Tiempo real' : 'Sincronización cada 20 s'}
+              {enTiempoReal ? 'Tiempo real' : 'Sincronización cada 15 s'}
             </span>
             <button
               type="button"
               className="btn"
               onClick={recargarActual}
-              disabled={cargandoActual}
+              disabled={cargando}
               style={{ ...btnGhost, minHeight: '40px' }}
             >
               <FiRefreshCw style={{ marginRight: '6px' }} />
-              {cargandoActual ? 'Actualizando…' : 'Actualizar'}
+              {cargando ? 'Actualizando…' : 'Actualizar'}
             </button>
           </div>
         </div>
@@ -387,6 +326,17 @@ function Pedidos() {
           ))}
         </div>
 
+        {tab === 'cocina' && (
+          <div style={{
+            ...tarjeta, padding: '11px 14px', marginBottom: '14px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            color: colores.textoSuave, fontSize: '12.5px'
+          }}>
+            <FiActivity style={{ color: colores.secundario, flexShrink: 0 }} />
+            Los pedidos confirmados desde el cliente llegan automáticamente a esta vista mediante el flujo de pedidos activos.
+          </div>
+        )}
+
         {successMessage && (
           <div role="status" style={{
             ...tarjeta, padding: '12px 16px', marginBottom: '14px',
@@ -397,7 +347,7 @@ function Pedidos() {
           </div>
         )}
 
-        {(errorAccion || errorActual) && (
+        {(errorAccion || error) && (
           <div role="alert" style={{
             ...tarjeta, padding: '12px 16px', marginBottom: '14px',
             backgroundColor: colores.errorFondo, color: colores.errorTexto,
@@ -405,7 +355,7 @@ function Pedidos() {
             gap: '12px', fontSize: '13.5px', flexWrap: 'wrap'
           }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-              <FiXCircle /> {errorAccion || errorActual}
+              <FiXCircle /> {errorAccion || error}
             </span>
             <button type="button" className="btn" onClick={recargarActual} style={{ ...btnGhost, minHeight: '36px' }}>
               Reintentar
@@ -462,7 +412,9 @@ function Pedidos() {
                   >
                     <option value="">Todos</option>
                     <option value="PENDIENTE">Pendiente</option>
-                    <option value="PAGADO">Pagado</option>
+                    <option value="APROBADO">Pagado</option>
+                    <option value="RECHAZADO">Rechazado</option>
+                    <option value="CANCELADO">Cancelado</option>
                   </select>
                 </label>
               )}
@@ -481,7 +433,7 @@ function Pedidos() {
           </div>
         </div>
 
-        {cargandoActual && pedidosBase.length === 0 ? (
+        {cargando && pedidosBase.length === 0 ? (
           <div style={{ ...tarjeta, padding: '56px 24px', textAlign: 'center', color: colores.textoSuave }}>
             <div className="spinner-border" style={{ color: colores.primario }}></div>
             <div style={{ marginTop: '10px', fontSize: '13px' }}>Cargando pedidos…</div>
@@ -501,7 +453,7 @@ function Pedidos() {
             <small>
               {tab === 'activos'
                 ? 'Los pedidos entregados o cancelados dejan de aparecer en esta lista.'
-                : 'La vista se actualiza automáticamente cada 20 segundos.'}
+                : 'La vista se actualiza automáticamente desde el servidor.'}
             </small>
           </div>
         ) : pedidosFiltrados.length === 0 ? (
@@ -540,7 +492,7 @@ function Pedidos() {
             ? (enTiempoReal
               ? 'Los cambios de estado se reciben en tiempo real desde el servidor.'
               : 'La lista se sincroniza automáticamente cada 15 segundos.')
-            : 'La vista de servicio se sincroniza automáticamente cada 20 segundos.'}
+            : 'La vista se sincroniza automáticamente con el servidor.'}
         </div>
       </div>
 

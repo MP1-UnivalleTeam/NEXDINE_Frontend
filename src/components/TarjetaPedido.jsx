@@ -1,6 +1,8 @@
 import { FiCheckCircle, FiClock, FiCreditCard, FiXCircle, FiUser, FiPhone, FiMapPin, FiHash } from 'react-icons/fi'
 import { colores, tarjeta, radios, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 import { formatearDinero } from '../utils/dinero.js'
+import EstadoPagoBadge from './EstadoPagoBadge.jsx'
+import { estaPagado } from '../utils/pagos.js'
 import {
   infoEstado,
   normalizarEstado,
@@ -30,7 +32,7 @@ function TarjetaPedido({
   const items = Array.isArray(pedido.items) ? pedido.items : []
   const finalizado = esEstadoFinal(pedido.estado)
   const cancelado = normalizarEstado(pedido.estado) === 'CANCELADO'
-  const pagado = pedido.pagoEstado === 'PAGADO'
+  const pagado = estaPagado(pedido.pagoEstado)
   const totalProductos = contarProductos(pedido)
 
   const cambiar = (nuevoEstado) => {
@@ -69,12 +71,7 @@ function TarjetaPedido({
                 : <FiCheckCircle size={12} />}
             {estado.etiqueta}
           </span>
-          <span style={estiloBadge(
-            pagado ? colores.exitoFondo : colores.advertenciaFondo,
-            pagado ? colores.exitoTexto : colores.advertenciaTexto
-          )}>
-            {pagado ? 'Pagado' : (pedido.pagoEstado ? 'Pago pendiente' : 'Sin pago')}
-          </span>
+          <EstadoPagoBadge estado={pedido.pagoEstado} />
         </div>
       </div>
 

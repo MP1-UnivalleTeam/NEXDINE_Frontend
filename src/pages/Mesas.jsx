@@ -12,6 +12,9 @@ import ModalPedidoManual from '../components/ModalPedidoManual.jsx'
 import { usePedidosActivos } from '../hooks/usePedidosActivos.js'
 import { actualizarEstadoPedido } from '../services/pedidos.js'
 import { etiquetaEstado } from '../utils/pedidos.js'
+import { resumirPagosMesa } from '../utils/pagos.js'
+import { formatearDinero } from '../utils/dinero.js'
+import EstadoPagoBadge from '../components/EstadoPagoBadge.jsx'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, input } from '../styles/tokens.js'
 
 function Mesas() {
@@ -271,6 +274,23 @@ function Mesas() {
     if (!mesaSeleccionada) return []
     return pedidos.filter(pedido => pedido.mesaId === mesaSeleccionada.id)
   }, [pedidos, mesaSeleccionada])
+
+  const pagosPorMesa = useMemo(() => {
+    const agrupados = new Map()
+    pedidos.forEach(pedido => {
+      if (!pedido.mesaId) return
+      const lista = agrupados.get(pedido.mesaId) || []
+      lista.push(pedido)
+      agrupados.set(pedido.mesaId, lista)
+    })
+    const resumen = {}
+    agrupados.forEach((lista, mesaId) => {
+      resumen[mesaId] = resumirPagosMesa(lista)
+    })
+    return resumen
+  }, [pedidos])
+
+  const pagoMesaSeleccionada = mesaSeleccionada ? pagosPorMesa[mesaSeleccionada.id] : null
 
   const cambiarEstadoPedido = async (pedido, estado) => {
     if (pedidoActualizando) return
@@ -623,7 +643,15 @@ function Mesas() {
               <span style={estiloBadge(colores.superficie, colores.textoSuave)}>
                 {pedidosMesa.length}
               </span>
+              {pagoMesaSeleccionada?.cantidad > 0 && (
+                <EstadoPagoBadge estado={pagoMesaSeleccionada.estado} />
+              )}
               <small style={{ color: colores.textoSuave, marginLeft: 'auto' }}>
+                {pagoMesaSeleccionada?.cantidad > 0 && (
+                  <strong style={{ color: colores.texto }}>
+                    Total activo {formatearDinero(pagoMesaSeleccionada.total)} ·{' '}
+                  </strong>
+                )}
                 {enTiempoReal
                   ? 'Los cambios se reciben en tiempo real.'
                   : 'La lista se sincroniza automáticamente cada 15 segundos.'}
@@ -780,6 +808,20 @@ function Mesas() {
                         {pedidos.filter(pedido => pedido.mesaId === mesa.id).length}
                       </span>
                     </div>
+                    {pagosPorMesa[mesa.id]?.cantidad > 0 && (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                          <span style={{ color: colores.textoSuave }}>Total activo</span>
+                          <span className="tnum" style={{ color: colores.texto, fontWeight: 600 }}>
+                            {formatearDinero(pagosPorMesa[mesa.id].total)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                          <span style={{ color: colores.textoSuave }}>Estado de pago</span>
+                          <EstadoPagoBadge estado={pagosPorMesa[mesa.id].estado} />
+                        </div>
+                      </>
+                    )}
                     {!mesa.activa && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ color: colores.textoSuave }}>Estado</span>

@@ -3,10 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FiArrowLeft, FiPackage, FiRefreshCw } from 'react-icons/fi'
 import api from '../services/api.js'
 import PagoPedido from '../components/PagoPedido.jsx'
+import EstadoPagoBadge from '../components/EstadoPagoBadge.jsx'
 import { obtenerResumenPedido } from '../services/pedidos.js'
 import { obtenerMensajeError } from '../services/mensajes.js'
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
 import { etiquetaEstado } from '../utils/pedidos.js'
+import { etiquetaMetodoPago } from '../utils/pagos.js'
 import { colores, tarjeta, btnPrimario, btnGhost } from '../styles/tokens.js'
 
 const dps = (valor) => Number(valor ?? 0).toLocaleString('es-CO')
@@ -138,6 +140,13 @@ function ResumenPedido() {
           <span className="badge bg-secondary">{etiquetaEstado(resumen.estado)}</span>
         </p>
       )}
+
+      <div className="d-flex align-items-center gap-2 flex-wrap mb-3">
+        <EstadoPagoBadge estado={resumen.pagoEstado} />
+        <small style={{ color: colores.textoSuave }}>
+          Método: {etiquetaMetodoPago(resumen.pagoMetodo)}
+        </small>
+      </div>
 
       <div className="row">
         <div className="col-12 col-lg-8">

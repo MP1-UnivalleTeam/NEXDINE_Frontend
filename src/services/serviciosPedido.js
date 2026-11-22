@@ -1,75 +1,62 @@
-import api from './api.js'
+import { listarPedidosActivos, actualizarEstadoPedido } from './pedidos.js'
 
 /**
- * Consulta y creación de pedidos por tipo de servicio.
+ * Vistas por tipo de servicio.
  *
- * Endpoints reales:
- *   /api/cocina/pedidos
- *   /api/para-llevar/pedidos
- *   /api/domicilios/pedidos
- *
- * Las listas requieren sesión de personal; el backend aplica el ámbito del
- * restaurante/sucursal. La creación de para llevar y domicilio está abierta,
- * igual que el flujo de invitado, y registra el pedido en la sesión actual.
+ * El backend no expone endpoints separados por servicio: todos los pedidos
+ * activos se consultan con `/api/pedidos/activos` y se filtran aquí. Las
+ * actualizaciones de estado usan el endpoint real de pedidos.
  */
 
-function construirParams(filtros = {}) {
-  const params = new URLSearchParams()
-  if (filtros.estado) params.append('estado', filtros.estado)
-  if (filtros.pagoEstado) params.append('pagoEstado', filtros.pagoEstado)
-  if (filtros.fechaDesde) params.append('fechaDesde', filtros.fechaDesde)
-  if (filtros.fechaHasta) params.append('fechaHasta', filtros.fechaHasta)
-  if (filtros.cliente) params.append('cliente', filtros.cliente)
-  if (filtros.sucursalId) params.append('sucursalId', filtros.sucursalId)
-  return params
+const ESTADOS_COCINA = ['CONFIRMADO', 'EN_PREPARACION']
+
+function normalizar(valor) {
+  return String(valor || '').trim().toUpperCase()
 }
 
-export async function listarPedidosCocina({ estado, sucursalId } = {}) {
-  const params = new URLSearchParams()
-  if (estado) params.append('estado', estado)
-  if (sucursalId) params.append('sucursalId', sucursalId)
+function filtrar(pedidos, { estado, pagoEstado, cliente, sucursalId, tipoServicio, estados } = {}) {
+  return (Array.isArray(pedidos) ? pedidos : []).filter(pedido => {
+    if (estado && normalizar(pedido.estado) !== normalizar(estado)) return false
+    if (estados && !estados.includes(normalizar(pedido.estado))) return false
+    if (pagoEstado && normalizar(pedido.pagoEstado) !== normalizar(pagoEstado)) return false
+    if (tipoServicio && normalizar(pedido.tipoServicio) !== tipoServicio) return false
+    if (sucursalId && pedido.sucursalId !== sucursalId) return false
+    if (cliente) {
+      const texto = String(cliente).toLowerCase()
+      const coincide = [pedido.nombre, pedido.telefono, pedido.numeroSeguimiento]
+        .filter(Boolean)
+        .some(valor => String(valor).toLowerCase().includes(texto))
+      if (!coincide) return false
+    }
+    return true
+  })
+}
 
-  const response = await api.get('/api/cocina/pedidos', { params })
-  return response.data
+export async function listarPedidosCocina(filtros = {}) {
+  const pedidos = await listarPedidosActivos()
+  return filtrar(pedidos, { ...filtros, estados: ESTADOS_COCINA })
 }
 
 export async function actualizarEstadoCocina(pedidoId, estado) {
-  const response = await api.put(`/api/cocina/pedidos/${pedidoId}/estado`, null, {
-    params: { estado }
-  })
-  return response.data
+  return actualizarEstadoPedido(pedidoId, estado)
 }
 
 export async function listarPedidosParaLlevar(filtros = {}) {
-  const response = await api.get('/api/para-llevar/pedidos', {
-    params: construirParams(filtros)
-  })
-  return response.data
+  const pedidos = await listarPedidosActivos()
+  return filtrar(pedidos, { ...filtros, tipoServicio: 'PARA_LLEVAR' })
 }
 
 export async function listarPedidosDomicilio(filtros = {}) {
-  const response = await api.get('/api/domicilios/pedidos', {
-    params: construirParams(filtros)
-  })
-  return response.data
+  const pedidos = await listarPedidosActivos()
+  return filtrar(pedidos, { ...filtros, tipoServicio: 'DOMICILIO' })
 }
 
 export async function obtenerPedidoParaLlevar(pedidoId) {
-  const response = await api.get(`/api/para-llevar/pedidos/${pedidoId}`)
-  return response.data
+  const pedidos = await listarPedidosParaLlevar()
+  return pedidos.find(pedido => pedido.id === pedidoId) || null
 }
 
 export async function obtenerPedidoDomicilio(pedidoId) {
-  const response = await api.get(`/api/domicilios/pedidos/${pedidoId}`)
-  return response.data
-}
-
-export async function crearPedidoParaLlevar(datos) {
-  const response = await api.post('/api/para-llevar/pedidos', datos)
-  return response.data
-}
-
-export async function crearPedidoDomicilio(datos) {
-  const response = await api.post('/api/domicilios/pedidos', datos)
-  return response.data
+  const pedidos = await listarPedidosDomicilio()
+  return pedidos.find(pedido => pedido.id === pedidoId) || null
 }
