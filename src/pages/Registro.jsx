@@ -21,6 +21,7 @@ function validar(datos) {
 
 function Registro() {
   const navigate = useNavigate()
+  const [tipoCuenta, setTipoCuenta] = useState(null)
   const [datos, setDatos] = useState({
     nombre: '',
     correo: '',
@@ -46,6 +47,14 @@ function Registro() {
     const mensajeValidacion = validar(datos)
     if (mensajeValidacion) {
       setError(mensajeValidacion)
+      return
+    }
+
+    if (tipoCuenta === 'ADMINISTRADOR') {
+      // El backend actual no expone un endpoint público de registro para
+      // cuentas de dueño/administrador; esa creación se gestiona desde el
+      // panel administrativo. No se inventa ninguna operación nueva.
+      setError('El registro de cuentas de dueño debe gestionarse desde el panel administrativo del restaurante.')
       return
     }
 
@@ -114,7 +123,7 @@ function Registro() {
             NEXDINE
           </h3>
           <p style={{ color: colores.textoSuave, margin: 0, fontSize: '14px' }}>
-            Crea tu cuenta de cliente
+            {tipoCuenta === 'ADMINISTRADOR' ? 'Crea la cuenta del dueño del restaurante' : 'Crea tu cuenta de cliente'}
           </p>
         </div>
 
@@ -129,6 +138,57 @@ function Registro() {
           </div>
         )}
 
+        {tipoCuenta === null ? (
+          <div>
+            <p className="small text-muted mb-3">Selecciona el tipo de cuenta que deseas crear.</p>
+
+            <button
+              type="button"
+              className="btn w-100 text-start mb-2"
+              onClick={() => setTipoCuenta('CLIENTE')}
+              style={{ border: `1px solid ${colores.borde}`, borderRadius: '12px', padding: '14px', backgroundColor: colores.tarjeta }}
+            >
+              <span className="d-flex align-items-center gap-3">
+                <span style={{
+                  width: '40px', height: '40px', borderRadius: '50%', backgroundColor: colores.mint,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  color: colores.primario, flexShrink: 0
+                }}>
+                  <i className="fa-solid fa-user"></i>
+                </span>
+                <span>
+                  <strong className="d-block" style={{ color: colores.texto }}>Registrar cliente</strong>
+                  <small className="text-muted">Crea una cuenta para que el cliente realice pedidos.</small>
+                </span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="btn w-100 text-start mb-2"
+              onClick={() => setTipoCuenta('ADMINISTRADOR')}
+              style={{ border: `1px solid ${colores.borde}`, borderRadius: '12px', padding: '14px', backgroundColor: colores.tarjeta }}
+            >
+              <span className="d-flex align-items-center gap-3">
+                <span style={{
+                  width: '40px', height: '40px', borderRadius: '50%', backgroundColor: colores.mint,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  color: colores.primario, flexShrink: 0
+                }}>
+                  <i className="fa-solid fa-shield-halved"></i>
+                </span>
+                <span>
+                  <strong className="d-block" style={{ color: colores.texto }}>Registrar para el dueño de la empresa</strong>
+                  <small className="text-muted">Crea la cuenta correspondiente al dueño/administrador del restaurante.</small>
+                </span>
+              </span>
+            </button>
+
+            <small className="d-block text-muted text-center mt-2">
+              Los clientes no realizan pedidos de administración.
+            </small>
+          </div>
+        ) : (
         <form onSubmit={enviar} noValidate>
           <div className="mb-3">
             <label className="form-label fw-semibold" htmlFor="registro-nombre">Nombre completo</label>
@@ -242,12 +302,24 @@ function Registro() {
             )}
           </button>
         </form>
+        )}
 
         <div className="text-center mt-3">
           <small style={{ color: colores.textoSuave }}>
             ¿Ya tienes cuenta? <Link to="/login" style={{ color: colores.secundario, fontWeight: 600 }}>Inicia sesión</Link>
           </small>
         </div>
+
+        {tipoCuenta !== null && (
+          <button
+            type="button"
+            className="btn w-100 mt-2 d-flex align-items-center justify-content-center gap-2"
+            style={{ ...btnGhost, minHeight: '42px' }}
+            onClick={() => { setTipoCuenta(null); setError(''); setRegistrado(false) }}
+          >
+            <FiArrowLeft /> Cambiar tipo de cuenta
+          </button>
+        )}
 
         <button
           type="button"

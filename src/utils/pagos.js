@@ -48,9 +48,27 @@ const ALIAS_ESTADO = {
   CANCELADO: 'CANCELADO'
 }
 
-const ETIQUETAS_METODO_ANTERIOR = {
-  ONLINE: 'Pago en línea',
-  CONTRA_ENTREGA: 'Método anterior'
+export const METODOS_PAGO = {
+  EFECTIVO: {
+    valor: 'EFECTIVO',
+    etiqueta: 'Efectivo',
+    descripcion: 'Pago en efectivo al recibir o recoger el pedido.'
+  },
+  TARJETA: {
+    valor: 'TARJETA',
+    etiqueta: 'Tarjeta',
+    descripcion: 'Pago con tarjeta débito o crédito.'
+  },
+  TRANSFERENCIA: {
+    valor: 'TRANSFERENCIA',
+    etiqueta: 'Transferencia',
+    descripcion: 'Transferencia bancaria; el pago se confirma al verificarla.'
+  }
+}
+
+const METODOS_POR_SERVICIO = {
+  DOMICILIO: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'],
+  PARA_LLEVAR: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA']
 }
 
 export function normalizarEstadoPago(estado) {
@@ -77,39 +95,6 @@ export function infoEstadoPago(estado) {
   }
 }
 
-export const METODOS_PAGO = {
-  EFECTIVO: {
-    valor: 'EFECTIVO',
-    etiqueta: 'Efectivo',
-    descripcion: 'Pago en efectivo al recibir o recoger el pedido.'
-  },
-  TARJETA: {
-    valor: 'TARJETA',
-    etiqueta: 'Tarjeta',
-    descripcion: 'Pago con tarjeta débito o crédito.'
-  },
-  TRANSFERENCIA: {
-    valor: 'TRANSFERENCIA',
-    etiqueta: 'Transferencia',
-    descripcion: 'Transferencia bancaria; el pago se confirma al verificarla.'
-  },
-  PAGO_EN_LINEA: {
-    valor: 'PAGO_EN_LINEA',
-    etiqueta: 'Pago en línea',
-    descripcion: 'Pago en línea; para domicilio requiere pago anticipado.'
-  },
-  CONTRA_ENTREGA: {
-    valor: 'CONTRA_ENTREGA',
-    etiqueta: 'Contra entrega',
-    descripcion: 'Pagas al recibir tu pedido a domicilio.'
-  }
-}
-
-const METODOS_POR_SERVICIO = {
-  DOMICILIO: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'PAGO_EN_LINEA', 'CONTRA_ENTREGA'],
-  PARA_LLEVAR: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'PAGO_EN_LINEA']
-}
-
 export function metodosPagoParaServicio(tipoServicio) {
   const claves = METODOS_POR_SERVICIO[tipoServicio] || METODOS_POR_SERVICIO.PARA_LLEVAR
   return claves.map(clave => METODOS_PAGO[clave])
@@ -117,9 +102,7 @@ export function metodosPagoParaServicio(tipoServicio) {
 
 export function etiquetaMetodoPago(metodo) {
   const clave = String(metodo || '').trim().toUpperCase()
-  return METODOS_PAGO[clave]?.etiqueta
-    || ETIQUETAS_METODO_ANTERIOR[clave]
-    || 'Sin seleccionar'
+  return METODOS_PAGO[clave]?.etiqueta || 'Sin seleccionar'
 }
 
 export function esPagoEnLinea(metodo) {

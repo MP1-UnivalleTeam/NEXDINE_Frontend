@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   FiAlertCircle, FiCheckCircle, FiCreditCard, FiDollarSign, FiLock, FiRefreshCw,
-  FiRepeat, FiTruck, FiXCircle
+  FiRepeat, FiXCircle
 } from 'react-icons/fi'
 import {
+  cancelarPago,
   confirmarPago,
   obtenerPago,
   registrarMontoEfectivo,
@@ -19,7 +20,6 @@ import {
   estaPagado,
   etiquetaMetodoPago,
   normalizarEstadoPago,
-  pagoCancelable,
   pagoDesdePedido
 } from '../utils/pagos.js'
 import {
@@ -31,8 +31,6 @@ const ROLES_CONFIRMACION = ['MESERO', 'ADMINISTRADOR', 'SUPERADMIN']
 const METODOS = [
   { valor: 'EFECTIVO', etiqueta: 'Efectivo', icono: FiDollarSign },
   { valor: 'TARJETA', etiqueta: 'Tarjeta', icono: FiCreditCard },
-  { valor: 'CONTRA_ENTREGA', etiqueta: 'Contra entrega', icono: FiTruck, soloDomicilio: true },
-  { valor: 'PAGO_EN_LINEA', etiqueta: 'Pago en línea', icono: FiLock, soloEnLinea: true },
   { valor: 'TRANSFERENCIA', etiqueta: 'Transferencia', icono: FiRepeat }
 ]
 
@@ -46,13 +44,6 @@ function mensajeDeError(err) {
   return obtenerMensajeError(err, 'No fue posible gestionar el pago.')
 }
 
-/**
- * Panel de pago reutilizable.
- *
- * El estado mostrado siempre proviene del pedido o de la consulta real del
- * pago. El frontend no declara pagos aprobados por su cuenta ni simula
- * operaciones que el servicio no confirme.
- */
 function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const pedidoId = pedido?.id
   const pagoInicial = pagoDesdePedido(pedido)
@@ -64,11 +55,11 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const [nota, setNota] = useState('')
   const [procesando, setProcesando] = useState('')
   const [confirmandoCancelacion, setConfirmandoCancelacion] = useState(false)
+  const [cancelando, setCancelando] = useState(false)
   const [monto, setMonto] = useState(
     pagoInicial?.pagoImporteRecibido > 0 ? String(pagoInicial.pagoImporteRecibido) : ''
   )
   const [referencia, setReferencia] = useState('')
-  const [modoPagoEnLinea, setModoPagoEnLinea] = useState(false)
   const requiereAnticipo = Boolean(pagoInicial?.pagoAnticipo)
 
   const cargar = useCallback(async () => {
@@ -108,10 +99,7 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const puedeConfirmar = ROLES_CONFIRMACION.includes(rol)
   const estadoPago = normalizarEstadoPago(pagoActual?.pagoEstado)
   const accionesDisponibles = disponible === true
-  const cancelacionDisponible = accionesDisponibles
-    && !pagado
-    && !cancelado
-    && pagoCancelable(pagoActual?.pagoEstado)
+  const cancelacionDisponible = accionesDisponibles && !cancelado
 
   const limpiarMensajes = () => {
     setError('')
@@ -135,11 +123,10 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
       const datos = await seleccionarMetodoPago(pedidoId, metodo)
       setPago(datos)
       setAviso(`Método de pago actualizado a ${etiquetaMetodoPago(datos.pagoMetodo)}.`)
-      setModoPagoEnLinea(metodo === 'PAGO_EN_LINEA')
-      if (datos.pagoMetodo !== 'EFECTIVO' && datos.pagoMetodo !== 'CONTRA_ENTREGA') {
+      if (datos.pagoMetodo !== 'EFECTIVO') {
         setMonto('')
       }
-      if (metodo === 'PAGO_EN_LINEA') {
+      if (metodo !== 'PAGO_EN_LINEA') {
         setReferencia('')
       }
     } catch (err) {
@@ -162,9 +149,9 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
       const datos = await registrarMontoEfectivo(pedidoId, valor)
       setPago(datos)
       setAviso(
-        datos.pagoCambio > 0
-          ? `Monto registrado. Cambio: ${formatearDinero(datos.pagoCambio)}.`
-          : 'Monto registrado. No hay cambio pendiente.'
+        Number(datos.pagoCambio) > 0
+          ? `Recibido: ${formatearDinero(datos.pagoImporteRecibido)} · Cambio: ${formatearDinero(datos.pagoCambio)}`
+          : `Recibido: ${formatearDinero(datos.pagoImporteRecibido)} · Sin cambio`
       )
     } catch (err) {
       manejarErrorOperacion(err)
@@ -193,7 +180,12 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
     setAviso('')
     try {
       const esAnticipo = requiereAnticipo && valor < Number(pagoActual?.total || 0)
-      const datos = await registrarPagoEnLinea(pedidoId, valor, referencia.trim(), esAnticipo)
+      const datos = await registrarPagoEnLinea(
+        pedidoId,
+        valor,
+        referencia.trim(),
+        esAnticipo
+      )
       setPago(datos)
       setAviso(
         esAnticipo
@@ -231,11 +223,30 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
     setNota('El cobro con tarjeta todavía no está disponible. No se realizó ningún cargo.')
   }
 
-  const confirmarCancelacion = () => {
+  const solicitarCancelacion = () => {
+    if (cancelando) return
+    limpiarMensajes()
+    setConfirmandoCancelacion(true)
+  }
+
+  const confirmarCancelacion = async () => {
+    if (cancelando) return
     setConfirmandoCancelacion(false)
+    setCancelando(true)
+    setProcesando('cancelar')
     setError('')
     setAviso('')
-    setNota('La cancelación de pagos no está disponible en este momento. El pago no fue modificado.')
+    setNota('')
+    try {
+      const resumen = await cancelarPago(pedidoId)
+      setPago(resumen)
+      setAviso('Pago cancelado correctamente.')
+    } catch (err) {
+      manejarErrorOperacion(err)
+    } finally {
+      setCancelando(false)
+      setProcesando('')
+    }
   }
 
   if (!pedidoId) return null
@@ -253,9 +264,16 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
     return (
       <div style={{ ...tarjeta, padding: compacto ? '14px' : '18px' }}>
         <div role="alert" style={{
-          backgroundColor: colores.errorFondo, color: colores.errorTexto,
-          borderRadius: radios.sm, padding: '10px 12px', fontSize: '13px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap'
+          backgroundColor: colores.errorFondo,
+          color: colores.errorTexto,
+          borderRadius: radios.sm,
+          padding: '10px 12px',
+          fontSize: '13px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+          flexWrap: 'wrap'
         }}>
           <span><FiXCircle style={{ marginRight: '6px' }} />{error}</span>
           <button type="button" className="btn" onClick={cargar} style={{ ...btnGhost, minHeight: '34px' }}>
@@ -283,9 +301,13 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
       </div>
 
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginTop: '12px', padding: '10px 12px',
-        backgroundColor: colores.superficie, borderRadius: radios.sm
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: '12px',
+        padding: '10px 12px',
+        backgroundColor: colores.superficie,
+        borderRadius: radios.sm
       }}>
         <span style={{ color: colores.textoSuave, fontSize: '13px' }}>Total del pedido</span>
         <strong className="tnum" style={{ color: colores.primario, fontSize: '18px', ...cifrasTabulares }}>
@@ -295,26 +317,44 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
 
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px' }}>
         <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px',
-          borderRadius: radios.full, backgroundColor: colores.mint, color: colores.primario,
-          fontSize: '11px', fontWeight: 600
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '4px 10px',
+          borderRadius: radios.full,
+          backgroundColor: colores.mint,
+          color: colores.primario,
+          fontSize: '11px',
+          fontWeight: 600
         }}>
           Método: {etiquetaMetodoPago(pagoActual.pagoMetodo)}
         </span>
         {pagoActual.pagoImporteRecibido > 0 && (
           <span style={{
-            display: 'inline-flex', alignItems: 'center', padding: '4px 10px',
-            borderRadius: radios.full, backgroundColor: colores.superficie,
-            color: colores.textoSuave, fontSize: '11px', fontWeight: 600
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            borderRadius: radios.full,
+            backgroundColor: colores.superficie,
+            color: colores.textoSuave,
+            fontSize: '11px',
+            fontWeight: 600
           }}>
             {pagoActual.pagoAnticipo ? 'Abono' : 'Recibido'}: {formatearDinero(pagoActual.pagoImporteRecibido)}
           </span>
         )}
         {pagoActual.pagoCambio > 0 && (
           <span style={{
-            display: 'inline-flex', alignItems: 'center', padding: '4px 10px',
-            borderRadius: radios.full, backgroundColor: colores.advertenciaFondo,
-            color: colores.advertenciaTexto, fontSize: '11px', fontWeight: 600
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            borderRadius: radios.full,
+            backgroundColor: colores.advertenciaFondo,
+            color: colores.advertenciaTexto,
+            fontSize: '11px',
+            fontWeight: 600
           }}>
             Cambio: {formatearDinero(pagoActual.pagoCambio)}
           </span>
@@ -323,8 +363,12 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
 
       {estadoPago === 'PENDIENTE' && (
         <div role="status" style={{
-          marginTop: '10px', backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+          marginTop: '10px',
+          backgroundColor: colores.advertenciaFondo,
+          color: colores.advertenciaTexto,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px'
         }}>
           <FiAlertCircle style={{ marginRight: '5px' }} />
           Pago pendiente de confirmación.
@@ -333,8 +377,12 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
 
       {estadoPago === 'PARCIAL' && (
         <div role="status" style={{
-          marginTop: '10px', backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+          marginTop: '10px',
+          backgroundColor: colores.advertenciaFondo,
+          color: colores.advertenciaTexto,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px'
         }}>
           <FiAlertCircle style={{ marginRight: '5px' }} />
           El pedido tiene un abono parcial. Falta completar el pago.
@@ -343,18 +391,29 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
 
       {estadoPago === 'RECHAZADO' && (
         <div role="alert" style={{
-          marginTop: '10px', backgroundColor: colores.errorFondo, color: colores.errorTexto,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+          marginTop: '10px',
+          backgroundColor: colores.errorFondo,
+          color: colores.errorTexto,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px'
         }}>
-          <FiXCircle style={{ marginRight: '5px' }} />
+          <FiXCircle style={{ marginRight: '6px' }} />
           El pago fue rechazado. Puedes intentar nuevamente.
         </div>
       )}
 
       {requiereAnticipo && !pagado && (
         <div role="status" style={{
-          marginTop: '10px', backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px'
+          marginTop: '10px',
+          backgroundColor: colores.advertenciaFondo,
+          color: colores.advertenciaTexto,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}>
           <FiLock style={{ flexShrink: 0 }} />
           <span>
@@ -368,18 +427,26 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
 
       {estadoPago === 'CANCELADO' && (
         <div role="alert" style={{
-          marginTop: '10px', backgroundColor: colores.errorFondo, color: colores.errorTexto,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+          marginTop: '10px',
+          backgroundColor: colores.errorFondo,
+          color: colores.errorTexto,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px'
         }}>
-          <FiXCircle style={{ marginRight: '5px' }} />
+          <FiXCircle style={{ marginRight: '6px' }} />
           El pago fue cancelado.
         </div>
       )}
 
       {aviso && (
         <div role="status" style={{
-          marginTop: '10px', backgroundColor: colores.exitoFondo, color: colores.exitoTexto,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+          marginTop: '10px',
+          backgroundColor: colores.exitoFondo,
+          color: colores.exitoTexto,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px'
         }}>
           <FiCheckCircle style={{ marginRight: '5px' }} />{aviso}
         </div>
@@ -387,8 +454,12 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
 
       {nota && (
         <div role="status" style={{
-          marginTop: '10px', backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+          marginTop: '10px',
+          backgroundColor: colores.advertenciaFondo,
+          color: colores.advertenciaTexto,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px'
         }}>
           <FiAlertCircle style={{ marginRight: '5px' }} />{nota}
         </div>
@@ -396,17 +467,25 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
 
       {error && (
         <div role="alert" style={{
-          marginTop: '10px', backgroundColor: colores.errorFondo, color: colores.errorTexto,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+          marginTop: '10px',
+          backgroundColor: colores.errorFondo,
+          color: colores.errorTexto,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px'
         }}>
-          <FiXCircle style={{ marginRight: '5px' }} />{error}
+          <FiXCircle style={{ marginRight: '6px' }} />{error}
         </div>
       )}
 
       {disponible === false && (
         <div style={{
-          marginTop: '10px', backgroundColor: colores.superficie, color: colores.textoSuave,
-          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+          marginTop: '10px',
+          backgroundColor: colores.superficie,
+          color: colores.textoSuave,
+          borderRadius: radios.sm,
+          padding: '9px 11px',
+          fontSize: '12.5px'
         }}>
           <FiLock style={{ marginRight: '5px' }} />
           La gestión de pagos no está disponible en este momento. Se muestra el estado registrado del pedido.
@@ -420,160 +499,198 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
         </div>
       )}
 
-      {!cancelado && !pagado && accionesDisponibles && (
-        <>
-          <div style={{ marginTop: '12px' }}>
-            <small style={{ display: 'block', color: colores.textoSuave, fontWeight: 600, marginBottom: '6px' }}>
-              Método de pago
-            </small>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {METODOS.map(({ valor, etiqueta, icono: Icono }) => {
-                const activo = metodoActual === valor
-                return (
+      {!cancelado && accionesDisponibles && (
+        <div style={{ marginTop: '12px' }}>
+          {!pagado && (
+            <>
+              <div>
+                <small style={{ display: 'block', color: colores.textoSuave, fontWeight: 600, marginBottom: '6px' }}>
+                  Método de pago
+                </small>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {METODOS.map(({ valor, etiqueta, icono: Icono }) => {
+                    const activo = metodoActual === valor
+                    return (
+                      <button
+                        key={valor}
+                        type="button"
+                        disabled={Boolean(procesando)}
+                        onClick={() => cambiarMetodo(valor)}
+                        style={{
+                          ...(activo ? btnPrimario : btnGhost),
+                          minHeight: '38px',
+                          fontSize: '12.5px',
+                          padding: '0 12px'
+                        }}
+                      >
+                        <Icono style={{ marginRight: '5px' }} />
+                        {etiqueta}
+                        {activo ? ' ✓' : ''}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {admiteEfectivo && (
+                <div style={{ marginTop: '12px' }}>
+                  <label htmlFor={`monto-pago-${pedidoId}`} style={{
+                    display: 'block',
+                    color: colores.textoSuave,
+                    fontWeight: 600,
+                    marginBottom: '6px',
+                    fontSize: '12.5px'
+                  }}>
+                    Monto recibido
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <input
+                      id={`monto-pago-${pedidoId}`}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={monto}
+                      disabled={Boolean(procesando)}
+                      onChange={(event) => setMonto(event.target.value)}
+                      placeholder={formatearDinero(pagoActual.total)}
+                      style={{ ...input, flex: '1 1 140px', minWidth: 0, padding: '0 10px' }}
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={Boolean(procesando)}
+                      onClick={registrarMonto}
+                      style={{ ...btnGhost, minHeight: '48px', padding: '0 14px' }}
+                    >
+                      {procesando === 'monto' ? 'Registrando…' : 'Registrar monto'}
+                    </button>
+                  </div>
+                  <small style={{ display: 'block', color: colores.textoSuave, marginTop: '5px' }}>
+                    El monto recibido debe cubrir el total del pedido.
+                  </small>
+                </div>
+              )}
+
+              {esTransferencia && (
+                <small style={{
+                  display: 'block',
+                  color: colores.textoSuave,
+                  marginTop: '10px',
+                  backgroundColor: colores.superficie,
+                  borderRadius: radios.sm,
+                  padding: '9px 11px',
+                  fontSize: '12.5px'
+                }}>
+                  Verifica la transferencia antes de confirmar el pago.
+                </small>
+              )}
+
+              {esTarjeta && esDomicilio ? (
+                <FormularioTarjeta onSolicitarCobro={solicitarCobroTarjeta} />
+              ) : puedeConfirmar ? (
+                esTarjeta ? (
+                  <small style={{
+                    display: 'block',
+                    color: colores.textoSuave,
+                    marginTop: '12px',
+                    backgroundColor: colores.superficie,
+                    borderRadius: radios.sm,
+                    padding: '9px 11px',
+                    fontSize: '12.5px'
+                  }}>
+                    <FiLock style={{ marginRight: '5px' }} />
+                    El pago con tarjeta se confirmará cuando el restaurante habilite el cobro seguro.
+                  </small>
+                ) : (
                   <button
-                    key={valor}
                     type="button"
-                    disabled={Boolean(procesando)}
-                    onClick={() => cambiarMetodo(valor)}
-                    style={{
-                      ...(activo ? btnPrimario : btnGhost),
-                      minHeight: '38px',
-                      fontSize: '12.5px',
-                      padding: '0 12px'
-                    }}
+                    className="btn w-100"
+                    disabled={Boolean(procesando) || !metodoActual}
+                    title={!metodoActual ? 'Selecciona un método de pago antes de confirmar.' : 'Confirmar pago'}
+                    onClick={confirmar}
+                    style={{ ...btnPrimario, minHeight: '44px', marginTop: '12px' }}
                   >
-                    <Icono style={{ marginRight: '5px' }} />
-                    {etiqueta}
-                    {activo ? ' ✓' : ''}
+                    <FiCheckCircle style={{ marginRight: '6px' }} />
+                    {procesando === 'confirmar' ? 'Confirmando…' : 'Confirmar pago'}
                   </button>
                 )
-              })}
-            </div>
-          </div>
+              ) : (
+                <small style={{
+                  display: 'block',
+                  color: colores.textoSuave,
+                  marginTop: '12px',
+                  backgroundColor: colores.superficie,
+                  borderRadius: radios.sm,
+                  padding: '9px 11px',
+                  fontSize: '12.5px'
+                }}>
+                  <FiLock style={{ marginRight: '5px' }} />
+                  El pago será confirmado por el personal autorizado (mesero o administrador).
+                </small>
+              )}
 
-          {admiteEfectivo && (
-            <div style={{ marginTop: '12px' }}>
-              <label htmlFor={`monto-pago-${pedidoId}`} style={{
-                display: 'block', color: colores.textoSuave, fontWeight: 600, marginBottom: '6px', fontSize: '12.5px'
-              }}>
-                Monto recibido
-              </label>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <input
-                  id={`monto-pago-${pedidoId}`}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={monto}
-                  disabled={Boolean(procesando)}
-                  onChange={(event) => setMonto(event.target.value)}
-                  placeholder={formatearDinero(pagoActual.total)}
-                  style={{ ...input, flex: '1 1 140px', minWidth: 0, padding: '0 10px' }}
-                />
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={Boolean(procesando)}
-                  onClick={registrarMonto}
-                  style={{ ...btnGhost, minHeight: '48px', padding: '0 14px' }}
-                >
-                  {procesando === 'monto' ? 'Registrando…' : 'Registrar monto'}
-                </button>
-              </div>
-              <small style={{ display: 'block', color: colores.textoSuave, marginTop: '5px' }}>
-                El monto debe cubrir el total del pedido.
-              </small>
-            </div>
+              {metodoActual === 'PAGO_EN_LINEA' && (
+                <div style={{ marginTop: '12px' }}>
+                  <label htmlFor={`referencia-pago-${pedidoId}`} style={{
+                    display: 'block',
+                    color: colores.textoSuave,
+                    fontWeight: 600,
+                    marginBottom: '6px',
+                    fontSize: '12.5px'
+                  }}>
+                    Referencia del pago en línea
+                  </label>
+                  <input
+                    id={`referencia-pago-${pedidoId}`}
+                    type="text"
+                    maxLength="100"
+                    value={referencia}
+                    disabled={Boolean(procesando)}
+                    onChange={(event) => setReferencia(event.target.value)}
+                    placeholder="Ej: TRX-123456"
+                    style={{ ...input, width: '100%', padding: '0 10px' }}
+                  />
+                  <div style={{ marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      className="btn w-100"
+                      disabled={Boolean(procesando) || !referencia.trim()}
+                      onClick={registrarPagoEnLineaHandler}
+                      style={{ ...btnPrimario, minHeight: '44px', marginTop: '8px' }}
+                    >
+                      {procesando === 'pago-en-linea'
+                        ? 'Registrando pago en línea…'
+                        : 'Registrar pago en línea'}
+                    </button>
+                  </div>
+                  <small style={{ display: 'block', color: colores.textoSuave, marginTop: '5px' }}>
+                    {requiereAnticipo
+                      ? 'Pago anticipado: el saldo restante se puede completar en otro pago.'
+                      : 'El monto debe cubrir el total del pedido para marcarlo como pagado.'}
+                  </small>
+                </div>
+              )}
+
+              {!metodoActual && (
+                <small style={{ display: 'block', color: colores.textoSuave, marginTop: '8px' }}>
+                  Selecciona un método para habilitar la confirmación.
+                </small>
+              )}
+            </>
           )}
 
-          {esTransferencia && (
-            <small style={{
-              display: 'block', color: colores.textoSuave, marginTop: '10px',
-              backgroundColor: colores.superficie, borderRadius: radios.sm, padding: '9px 11px'
+          {pagado && (
+            <div role="status" style={{
+              backgroundColor: colores.exitoFondo,
+              color: colores.exitoTexto,
+              borderRadius: radios.sm,
+              padding: '10px 12px',
+              fontSize: '13px'
             }}>
-              Verifica la transferencia antes de confirmar el pago.
-            </small>
-          )}
-
-          {esTarjeta && esDomicilio && (
-            <FormularioTarjeta onSolicitarCobro={solicitarCobroTarjeta} />
-          )}
-
-          {puedeConfirmar ? (
-            esTarjeta ? (
-              <small style={{
-                display: 'block', color: colores.textoSuave, marginTop: '12px',
-                backgroundColor: colores.superficie, borderRadius: radios.sm, padding: '9px 11px'
-              }}>
-                <FiLock style={{ marginRight: '5px' }} />
-                El pago con tarjeta se confirmará cuando el restaurante habilite el cobro seguro.
-              </small>
-            ) : (
-              <button
-                type="button"
-                className="btn w-100"
-                disabled={Boolean(procesando) || !metodoActual}
-                title={!metodoActual ? 'Selecciona un método de pago antes de confirmar.' : 'Confirmar pago'}
-                onClick={confirmar}
-                style={{ ...btnPrimario, minHeight: '44px', marginTop: '12px' }}
-              >
-                <FiCheckCircle style={{ marginRight: '6px' }} />
-                {procesando === 'confirmar' ? 'Confirmando…' : 'Confirmar pago'}
-              </button>
-            )
-          ) : (
-            <small style={{
-              display: 'block', color: colores.textoSuave, marginTop: '12px',
-              backgroundColor: colores.superficie, borderRadius: radios.sm, padding: '9px 11px'
-            }}>
-              <FiLock style={{ marginRight: '5px' }} />
-              El pago será confirmado por el personal autorizado (mesero o administrador).
-            </small>
-          )}
-
-          {metodoActual === 'PAGO_EN_LINEA' && (
-            <div style={{ marginTop: '12px' }}>
-              <label htmlFor={`referencia-pago-${pedidoId}`} style={{
-                display: 'block', color: colores.textoSuave, fontWeight: 600, marginBottom: '6px', fontSize: '12.5px'
-              }}>
-                Referencia del pago en línea
-              </label>
-              <input
-                id={`referencia-pago-${pedidoId}`}
-                type="text"
-                maxLength="100"
-                value={referencia}
-                disabled={Boolean(procesando)}
-                onChange={(event) => setReferencia(event.target.value)}
-                placeholder="Ej: TRX-123456"
-                style={{ ...input, width: '100%', padding: '0 10px' }}
-              />
-              <div style={{ marginTop: '8px' }}>
-                <button
-                  type="button"
-                  className="btn w-100"
-                  disabled={Boolean(procesando) || !referencia.trim()}
-                  onClick={registrarPagoEnLineaHandler}
-                  style={{ ...btnPrimario, minHeight: '44px', marginTop: '8px' }}
-                >
-                  {procesando === 'pago-en-linea'
-                    ? 'Registrando pago en línea…'
-                    : 'Registrar pago en línea'}
-                </button>
-              </div>
-              <small style={{ display: 'block', color: colores.textoSuave, marginTop: '5px' }}>
-                {requiereAnticipo
-                  ? 'Pago anticipado: el saldo restante se puede completar en otro pago.'
-                  : 'El monto debe cubrir el total del pedido para marcarlo como pagado.'}
-              </small>
+              <FiCheckCircle style={{ marginRight: '6px' }} />
+              Pago aprobado. El pedido quedó registrado como pagado.
             </div>
-          )}
-
-          {!metodoActual && (
-            <small style={{ display: 'block', color: colores.textoSuave, marginTop: '8px' }}>
-              Selecciona un método para habilitar la confirmación.
-            </small>
           )}
 
           {cancelacionDisponible && (
@@ -582,51 +699,59 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
                 <button
                   type="button"
                   className="btn"
-                  disabled={Boolean(procesando)}
-                  onClick={() => {
-                    limpiarMensajes()
-                    setConfirmandoCancelacion(true)
-                  }}
+                  disabled={Boolean(procesando) || cancelando}
+                  onClick={solicitarCancelacion}
                   style={{ ...btnGhost, minHeight: '42px', fontSize: '13px', color: colores.errorTexto }}
                 >
                   <FiXCircle style={{ marginRight: '6px' }} /> Cancelar pago
                 </button>
               ) : (
                 <div role="alertdialog" aria-label="Confirmar cancelación del pago" style={{
-                  backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
-                  borderRadius: radios.sm, padding: '10px 12px', fontSize: '12.5px'
+                  backgroundColor: colores.advertenciaFondo,
+                  color: colores.advertenciaTexto,
+                  borderRadius: radios.sm,
+                  padding: '10px 12px',
+                  fontSize: '12.5px'
                 }}>
-                  <strong style={{ display: 'block', marginBottom: '4px' }}>¿Cancelar el pago de este pedido?</strong>
+                  <strong style={{ display: 'block', marginBottom: '4px' }}>
+                    ¿Estás seguro de que deseas cancelar este pago?
+                  </strong>
                   <span>Esta acción no se puede deshacer.</span>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       className="btn"
                       onClick={confirmarCancelacion}
+                      disabled={cancelando || Boolean(procesando)}
                       style={{ ...btnGhost, minHeight: '36px', fontSize: '12.5px', color: colores.errorTexto }}
                     >
-                      Sí, cancelar pago
+                      {cancelando ? 'Cancelando…' : 'Confirmar cancelación'}
                     </button>
                     <button
                       type="button"
                       className="btn"
                       onClick={() => setConfirmandoCancelacion(false)}
+                      disabled={cancelando || Boolean(procesando)}
                       style={{ ...btnGhost, minHeight: '36px', fontSize: '12.5px' }}
                     >
-                      No, volver
+                      Cancelar
                     </button>
                   </div>
                 </div>
               )}
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {pagado && (
+      {pagado && !cancelacionDisponible && (
         <div role="status" style={{
-          marginTop: '12px', backgroundColor: colores.exitoFondo, color: colores.exitoTexto,
-          borderRadius: radios.sm, padding: '10px 12px', fontSize: '13px'
+          marginTop: '12px',
+          backgroundColor: colores.exitoFondo,
+          color: colores.exitoTexto,
+          borderRadius: radios.sm,
+          padding: '10px 12px',
+          fontSize: '13px'
         }}>
           <FiCheckCircle style={{ marginRight: '6px' }} />
           Pago aprobado. El pedido quedó registrado como pagado.

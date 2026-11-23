@@ -21,6 +21,7 @@ function FormularioTarjeta({ onSolicitarCobro }) {
   const [fecha, setFecha] = useState('')
   const [cvc, setCvc] = useState('')
   const [error, setError] = useState('')
+  const [enviando, setEnviando] = useState(false)
 
   const limpiar = () => {
     setNumero('')
@@ -29,21 +30,33 @@ function FormularioTarjeta({ onSolicitarCobro }) {
     setCvc('')
   }
 
-  const enviar = (event) => {
+  const enviar = async (event) => {
     event.preventDefault()
+    if (enviando) return
+
     const digitosNumero = soloDigitos(numero)
     const digitosFecha = soloDigitos(fecha)
     const digitosCvc = soloDigitos(cvc)
-    if (digitosNumero.length < 13
-      || !titular.trim()
-      || digitosFecha.length !== 4
-      || digitosCvc.length < 3) {
-      setError('Completa los datos de la tarjeta.')
+
+    const faltantes = []
+    if (digitosNumero.length < 13) faltantes.push('el número de tarjeta')
+    if (!titular.trim()) faltantes.push('el nombre del titular')
+    if (digitosFecha.length !== 4) faltantes.push('la fecha de vencimiento')
+    if (digitosCvc.length < 3) faltantes.push('el CVC')
+
+    if (faltantes.length > 0) {
+      setError(`Falta completar: ${faltantes.join(', ')}.`)
       return
     }
+
     setError('')
-    limpiar()
-    onSolicitarCobro?.()
+    setEnviando(true)
+    try {
+      limpiar()
+      onSolicitarCobro?.()
+    } finally {
+      setEnviando(false)
+    }
   }
 
   const campo = {
@@ -61,7 +74,7 @@ function FormularioTarjeta({ onSolicitarCobro }) {
         display: 'flex', alignItems: 'center', gap: '6px',
         color: colores.texto, fontWeight: 600, fontSize: '13px', marginBottom: '10px'
       }}>
-        <FiCreditCard /> Datos de la tarjeta
+        <FiCreditCard /> Información de tarjeta
       </div>
 
       {error && (
@@ -130,12 +143,13 @@ function FormularioTarjeta({ onSolicitarCobro }) {
         </div>
       </div>
 
-      <button type="submit" className="btn w-100" style={{ ...btnPrimario, minHeight: '42px', fontSize: '13px' }}>
-        <FiLock style={{ marginRight: '6px' }} /> Cobrar tarjeta
+      <button type="submit" className="btn w-100" style={{ ...btnPrimario, minHeight: '42px', fontSize: '13px' }} disabled={enviando}>
+        <FiLock style={{ marginRight: '6px' }} />
+        {enviando ? 'Confirmando…' : 'Confirmar pago'}
       </button>
 
       <small style={{ display: 'block', color: colores.textoSuave, marginTop: '8px', fontSize: '11.5px' }}>
-        Los datos no se guardan ni se envían desde este formulario.
+        Los datos de la tarjeta no se guardan ni se envían desde este formulario.
       </small>
     </form>
   )

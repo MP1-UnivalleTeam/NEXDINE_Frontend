@@ -1,12 +1,5 @@
 import api from './api.js'
 
-/**
- * Pagos de un pedido.
- *
- * El backend es la única autoridad sobre el total, el monto recibido y el
- * cambio. El frontend únicamente envía el método y el monto entregado por el
- * cliente; nunca calcula el cambio ni confirma un pago por su cuenta.
- */
 export async function obtenerPago(pedidoId) {
   const response = await api.get(`/api/pedidos/${pedidoId}/pago`)
   return response.data
@@ -38,5 +31,12 @@ export async function registrarPagoEnLinea(pedidoId, monto, referencia, anticipo
   params.append('anticipo', String(anticipo))
 
   const response = await api.post(`/api/pedidos/${pedidoId}/pago/en-linea`, params)
+  return response.data
+}
+
+export async function cancelarPago(pedidoId) {
+  const response = await api.put(`/api/pedidos/${pedidoId}/estado`, null, {
+    params: { estado: 'CANCELADO' }
+  })
   return response.data
 }

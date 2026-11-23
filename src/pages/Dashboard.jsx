@@ -22,9 +22,6 @@ function Dashboard() {
     sucursalId: ''
   })
 
-  // Tipo de registro elegido en el modal de creación
-  const [tipoRegistro, setTipoRegistro] = useState(null)
-
   // Sucursales permitidas para asignar
   const [sucursales, setSucursales] = useState([])
 
@@ -137,7 +134,6 @@ function Dashboard() {
         closeEditUserModal()
       } else {
         setShowCreateUserModal(false)
-        setTipoRegistro(null)
         setFormError('')
       }
     }
@@ -148,7 +144,6 @@ function Dashboard() {
 
   const openCreateUserModal = () => {
     setFormError('')
-    setTipoRegistro(null)
     setNewUser({
       nombre: '',
       contraseña: '',
@@ -158,20 +153,6 @@ function Dashboard() {
       sucursalId: ''
     })
     setShowCreateUserModal(true)
-  }
-
-  const elegirTipoRegistro = (tipo) => {
-    if (tipo === 'ADMINISTRADOR' && !esSuperadmin()) {
-      setFormError('Solo el superadministrador puede registrar al dueño de la empresa.')
-      return
-    }
-    setFormError('')
-    setTipoRegistro(tipo)
-    setNewUser(prev => ({
-      ...prev,
-      rol: tipo === 'CLIENTE' ? 'CLIENTE' : tipo === 'ADMINISTRADOR' ? 'ADMINISTRADOR' : 'MESERO',
-      sucursalId: ''
-    }))
   }
 
   /**
@@ -209,7 +190,6 @@ function Dashboard() {
 
   const closeCreateUserModal = () => {
     setShowCreateUserModal(false)
-    setTipoRegistro(null)
     setFormError('')
   }
 
@@ -219,26 +199,17 @@ function Dashboard() {
     setFormError('')
     setSuccessMessage('')
 
-    if (!tipoRegistro) {
-      setFormError('Selecciona el tipo de registro.')
-      return
-    }
-
-    if (tipoRegistro === 'ADMINISTRADOR' && !esSuperadmin()) {
-      setFormError('Solo el superadministrador puede registrar al dueño de la empresa.')
-      return
-    }
-
     if (!newUser.nombre.trim()) {
       setFormError('El nombre de usuario es obligatorio')
       return
     }
 
-    const rol = tipoRegistro === 'CLIENTE'
-      ? 'CLIENTE'
-      : tipoRegistro === 'ADMINISTRADOR'
-        ? 'ADMINISTRADOR'
-        : (newUser.rol === 'COCINERO' ? 'COCINERO' : 'MESERO')
+    const rol = newUser.rol
+
+    if (rol === 'ADMINISTRADOR' && !esSuperadmin()) {
+      setFormError('Solo el superadministrador puede registrar al dueño de la empresa.')
+      return
+    }
 
     const params = new URLSearchParams()
     params.append('nombre', newUser.nombre.trim())
@@ -253,15 +224,8 @@ function Dashboard() {
     setCreandoUsuario(true)
     try {
       await api.post('/users/create', params)
-      setSuccessMessage(
-        tipoRegistro === 'CLIENTE'
-          ? 'Cliente registrado correctamente.'
-          : tipoRegistro === 'ADMINISTRADOR'
-            ? 'Dueño de la empresa registrado correctamente.'
-            : MENSAJES.USUARIO_CREADO
-      )
+      setSuccessMessage(MENSAJES.USUARIO_CREADO)
       setShowCreateUserModal(false)
-      setTipoRegistro(null)
       setNewUser({ nombre: '', contraseña: '', rol: 'COCINERO', celular: '', direccion: '', sucursalId: '' })
       await loadUsers()
       setTimeout(() => setSuccessMessage(''), 3000)
@@ -398,14 +362,6 @@ function Dashboard() {
 
   const isAdmin = () => currentUser?.rol === 'ADMINISTRADOR' || currentUser?.rol === 'SUPERADMIN'
 
-  const tituloRegistro = tipoRegistro === 'CLIENTE'
-    ? 'Registrar cliente'
-    : tipoRegistro === 'ADMINISTRADOR'
-      ? 'Registrar dueño de la empresa'
-      : tipoRegistro === 'COLABORADOR'
-        ? 'Registrar colaborador'
-        : 'Registrar usuario'
-
   const getRoleBadge = (rol) => {
     const styles = {
       ADMINISTRADOR: { bg: colores.errorFondo, color: '#B91C1C', border: '#FECACA', icon: 'fa-shield-halved', label: 'Administrador' },
@@ -494,7 +450,7 @@ function Dashboard() {
 
             {/* Buscar Usuario */}
             {isAdmin() && (
-                <div className="card p-3 mb-4" style={tarjeta}>
+              <div className="card p-3 mb-4" style={tarjeta}>
                 <h5 className="mb-3">
                   <i className="fa-solid fa-magnifying-glass me-2"></i>
                   Buscar Usuario
@@ -502,18 +458,18 @@ function Dashboard() {
                 <form onSubmit={handleSearch}>
                   <div className="row g-2 align-items-end">
                     <div className="col-md-8">
-                      <label className="form-label small fw-semibold">ID del usuario</label>
+                      <label className="form-label small fw-semibold" htmlFor="buscar-usuario-id">ID del usuario</label>
                       <input
+                        id="buscar-usuario-id"
                         type="number"
                         min="1"
                         step="1"
                         className="form-control form-control-sm"
-                        placeholder="Ej: 1"
+                        placeholder="[ Ej: 1 ]"
                         required
                         value={searchId}
                         onChange={(e) => { setSearchId(e.target.value); setBusquedaError('') }}
                       />
-                      <small className="text-muted">Es el número que aparece en la columna ID.</small>
                     </div>
                     <div className="col-md-2">
                       <button type="submit" className="btn btn-sm w-100" style={{ backgroundColor: colores.primario, color: 'white' }}>
@@ -581,7 +537,7 @@ function Dashboard() {
                   )}
                   {usuariosVisibles.map(user => (
                     <tr key={user.id}>
-                      <td><strong>#{user.idVisual}</strong></td>
+                      <td><strong>{user.idVisual}</strong></td>
                       <td><strong>{user.nombre}</strong></td>
                       <td>{getRoleBadge(user.rol)}</td>
                       <td className="text-muted">
@@ -785,7 +741,7 @@ function Dashboard() {
               <div className="modal-content">
                 <div className="modal-header" style={{ backgroundColor: colores.primario, color: 'white' }}>
                   <h5 className="modal-title">
-                    <FiPlus style={{ marginRight: '8px' }} />{tituloRegistro}
+                    <FiPlus style={{ marginRight: '8px' }} /> Registrar usuario
                   </h5>
                   <button type="button" className="btn-close btn-close-white" onClick={closeCreateUserModal}></button>
                 </div>
@@ -798,200 +754,115 @@ function Dashboard() {
                       </div>
                     )}
 
-                    {tipoRegistro === null ? (
-                      <>
-                        <p className="small text-muted mb-3">Selecciona el tipo de registro que deseas crear.</p>
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Nombre de usuario</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Ej: maria123"
+                        required
+                        value={newUser.nombre}
+                        onChange={(e) => setNewUser({ ...newUser, nombre: e.target.value })}
+                      />
+                    </div>
 
-                        <button
-                          type="button"
-                          className="btn w-100 text-start mb-2"
-                          onClick={() => elegirTipoRegistro('CLIENTE')}
-                          style={{ border: `1px solid ${colores.borde}`, borderRadius: '12px', padding: '14px', backgroundColor: colores.tarjeta }}
-                        >
-                          <span className="d-flex align-items-center gap-3">
-                            <span style={{
-                              width: '40px', height: '40px', borderRadius: '50%', backgroundColor: colores.mint,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              color: colores.primario, flexShrink: 0
-                            }}>
-                              <i className="fa-solid fa-user"></i>
-                            </span>
-                            <span>
-                              <strong className="d-block" style={{ color: colores.texto }}>Registrar cliente</strong>
-                              <small className="text-muted">Crea una cuenta para que el cliente haga pedidos.</small>
-                            </span>
-                          </span>
-                        </button>
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Celular</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        placeholder="3001234567"
+                        required
+                        value={newUser.celular}
+                        onChange={(e) => setNewUser({ ...newUser, celular: e.target.value })}
+                      />
+                    </div>
 
-                        <button
-                          type="button"
-                          className="btn w-100 text-start mb-2"
-                          onClick={() => elegirTipoRegistro('ADMINISTRADOR')}
-                          style={{ border: `1px solid ${colores.borde}`, borderRadius: '12px', padding: '14px', backgroundColor: colores.tarjeta }}
-                        >
-                          <span className="d-flex align-items-center gap-3">
-                            <span style={{
-                              width: '40px', height: '40px', borderRadius: '50%', backgroundColor: colores.mint,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              color: colores.primario, flexShrink: 0
-                            }}>
-                              <i className="fa-solid fa-shield-halved"></i>
-                            </span>
-                            <span>
-                              <strong className="d-block" style={{ color: colores.texto }}>Registrar para el dueño de la empresa</strong>
-                              <small className="text-muted">Crea el administrador del restaurante.</small>
-                            </span>
-                          </span>
-                        </button>
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Contraseña</label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        placeholder="Contraseña"
+                        required
+                        value={newUser.contraseña}
+                        onChange={(e) => setNewUser({ ...newUser, contraseña: e.target.value })}
+                      />
+                    </div>
 
-                        <div className="text-center mt-2">
-                          <button
-                            type="button"
-                            className="btn btn-link btn-sm p-0"
-                            onClick={() => elegirTipoRegistro('COLABORADOR')}
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Rol</label>
+                      <select
+                        className="form-select"
+                        value={newUser.rol}
+                        onChange={(e) => setNewUser({ ...newUser, rol: e.target.value, sucursalId: '' })}
+                      >
+                        {esSuperadmin() && <option value="ADMINISTRADOR">Administrador</option>}
+                        <option value="MESERO">Mesero</option>
+                        <option value="COCINERO">Cocinero</option>
+                      </select>
+                    </div>
+
+                    {/* Sucursal: solo si el rol la requiere */}
+                    {requiereSucursal(newUser.rol) && (
+                      <div className="mb-3">
+                        <label className="form-label small fw-semibold">Sucursal</label>
+                        {esSuperadmin() ? (
+                          <select
+                            className="form-select"
+                            value={newUser.sucursalId}
+                            onChange={(e) => setNewUser({ ...newUser, sucursalId: e.target.value })}
                           >
-                            Registrar colaborador (mesero o cocinero)
-                          </button>
-                        </div>
-
-                        <small className="d-block text-muted text-center mt-2">
-                          Los clientes no aparecen en la tabla de personal.
-                        </small>
-                      </>
-                    ) : (
-                      <>
-                        <div className="mb-3">
-                          <label className="form-label small fw-semibold">Nombre de usuario</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="Ej: maria123"
-                            required
-                            value={newUser.nombre}
-                            onChange={(e) => setNewUser({ ...newUser, nombre: e.target.value })}
-                          />
-                        </div>
-
-                        <div className="mb-3">
-                          <label className="form-label small fw-semibold">Celular</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            placeholder="3001234567"
-                            required
-                            value={newUser.celular}
-                            onChange={(e) => setNewUser({ ...newUser, celular: e.target.value })}
-                          />
-                        </div>
-
-                        <div className="mb-3">
-                          <label className="form-label small fw-semibold">Contraseña</label>
-                          <input
-                            type="password"
-                            className="form-control"
-                            placeholder="Contraseña"
-                            required
-                            value={newUser.contraseña}
-                            onChange={(e) => setNewUser({ ...newUser, contraseña: e.target.value })}
-                          />
-                        </div>
-
-                        <div className="mb-3">
-                          <label className="form-label small fw-semibold">Rol</label>
-                          {tipoRegistro === 'COLABORADOR' ? (
-                            <select
-                              className="form-select"
-                              value={newUser.rol}
-                              onChange={(e) => setNewUser({ ...newUser, rol: e.target.value, sucursalId: '' })}
-                            >
-                              <option value="MESERO">Mesero</option>
-                              <option value="COCINERO">Cocinero</option>
-                            </select>
-                          ) : (
+                            <option value="">Sin asignar</option>
+                            {sucursales.map(s => (
+                              <option key={s.id} value={s.id}>{s.nombre}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <>
                             <input
                               type="text"
                               className="form-control"
+                              value={sucursales[0]?.nombre || 'Su sucursal'}
                               disabled
-                              value={tipoRegistro === 'CLIENTE' ? 'Cliente' : 'Administrador (dueño de la empresa)'}
                             />
-                          )}
-                        </div>
-
-                        {/* Sucursal: solo si el rol la requiere */}
-                        {requiereSucursal(newUser.rol) && (
-                          <div className="mb-3">
-                            <label className="form-label small fw-semibold">Sucursal</label>
-                            {esSuperadmin() ? (
-                              <select
-                                className="form-select"
-                                value={newUser.sucursalId}
-                                onChange={(e) => setNewUser({ ...newUser, sucursalId: e.target.value })}
-                              >
-                                <option value="">Sin asignar</option>
-                                {sucursales.map(s => (
-                                  <option key={s.id} value={s.id}>{s.nombre}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={sucursales[0]?.nombre || 'Su sucursal'}
-                                  disabled
-                                />
-                                <small className="text-muted">
-                                  Se asignará automáticamente a su sucursal.
-                                </small>
-                              </>
-                            )}
-                          </div>
+                            <small className="text-muted">
+                              Se asignará automáticamente a su sucursal.
+                            </small>
+                          </>
                         )}
-
-                        <div className="mb-3">
-                          <label className="form-label small fw-semibold">Dirección</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="Calle 123 #45-67"
-                            value={newUser.direccion}
-                            onChange={(e) => setNewUser({ ...newUser, direccion: e.target.value })}
-                          />
-                        </div>
-                      </>
+                      </div>
                     )}
+
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Dirección</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Calle 123 #45-67"
+                        value={newUser.direccion}
+                        onChange={(e) => setNewUser({ ...newUser, direccion: e.target.value })}
+                      />
+                    </div>
                   </div>
                   <div className="modal-footer">
-                    {tipoRegistro ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => { setTipoRegistro(null); setFormError('') }}
-                          disabled={creandoUsuario}
-                        >
-                          Volver
-                        </button>
-                        <button
-                          type="submit"
-                          className="btn btn-sm"
-                          style={{ backgroundColor: colores.primario, color: 'white' }}
-                          disabled={creandoUsuario}
-                        >
-                          {creandoUsuario ? (
-                            <>
-                              <span className="spinner-border spinner-border-sm me-1"></span>Registrando…
-                            </>
-                          ) : (
-                            <><FiPlus style={{ marginRight: '5px' }} /> Registrar</>
-                          )}
-                        </button>
-                      </>
-                    ) : (
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateUserModal}>
-                        Cancelar
-                      </button>
-                    )}
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateUserModal} disabled={creandoUsuario}>
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-sm"
+                      style={{ backgroundColor: colores.primario, color: 'white' }}
+                      disabled={creandoUsuario}
+                    >
+                      {creandoUsuario ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-1"></span>Registrando…
+                        </>
+                      ) : (
+                        <><FiPlus style={{ marginRight: '5px' }} /> Registrar</>
+                      )}
+                    </button>
                   </div>
                 </form>
               </div>
@@ -1001,6 +872,34 @@ function Dashboard() {
       )}
     </div>
   )
+}
+
+function chipEstilo(activo) {
+  return {
+    minHeight: '38px',
+    padding: '0 13px',
+    borderRadius: 9999,
+    border: activo ? `1px solid ${colores.primario}` : `1px solid ${colores.borde}`,
+    backgroundColor: activo ? colores.primario : colores.tarjeta,
+    color: activo ? '#FFF' : colores.texto,
+    fontWeight: 600,
+    fontSize: '12.5px',
+    cursor: 'pointer'
+  }
+}
+
+function tabEstilo(activo) {
+  return {
+    minHeight: '40px',
+    padding: '0 18px',
+    borderRadius: 8,
+    border: activo ? `1px solid ${colores.primario}` : `1px solid ${colores.borde}`,
+    backgroundColor: activo ? colores.primario : colores.tarjeta,
+    color: activo ? '#FFF' : colores.texto,
+    fontWeight: 700,
+    fontSize: '13px',
+    cursor: 'pointer'
+  }
 }
 
 export default Dashboard
