@@ -10,6 +10,8 @@ import Carrito from './pages/Carrito.jsx'
 import PedidoInvitado from './pages/PedidoInvitado.jsx'
 import ResumenPedido from './pages/ResumenPedido.jsx'
 import Pedidos from './pages/Pedidos.jsx'
+import ParaLlevar from './pages/ParaLlevar.jsx'
+import Domicilios from './pages/Domicilios.jsx'
 import Favoritos from './pages/Favoritos.jsx'
 import Impuestos from './pages/Impuestos.jsx'
 import { CarritoProvider } from './context/CarritoContext.jsx'
@@ -30,6 +32,8 @@ function App() {
             <Route path="/productos" element={<Productos />} />
             <Route path="/mesas" element={<Mesas />} />
             <Route path="/pedidos" element={<Pedidos />} />
+            <Route path="/para-llevar" element={<ParaLlevar />} />
+            <Route path="/domicilios" element={<Domicilios />} />
             <Route path="/favoritos" element={<Favoritos />} />
             <Route path="/sucursales" element={<Sucursales />} />
             <Route path="/impuestos" element={<Impuestos />} />

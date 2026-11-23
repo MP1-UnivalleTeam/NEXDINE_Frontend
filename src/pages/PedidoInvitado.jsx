@@ -98,11 +98,9 @@ function PedidoInvitado() {
       setError('Selecciona un método de pago para continuar.')
       return
     }
-    if (pagoEnLineaSeleccionado) {
+    if (pagoEnLineaSeleccionado && formData.tipoServicio === 'DOMICILIO') {
       setError(
-        formData.tipoServicio === 'DOMICILIO'
-          ? 'El pedido a domicilio con pago en línea requiere pago anticipado. El pago en línea aún no está habilitado; elige contra entrega para continuar.'
-          : 'El pago en línea aún no está habilitado. Elige pago en efectivo para continuar.'
+        'El pago a domicilio en línea requiere pago anticipado. Continúa con el pedido y registra el pago en el resumen.'
       )
       return
     }
@@ -404,10 +402,9 @@ function PedidoInvitado() {
                     }}>
                       <FiLock style={{ flexShrink: 0, marginTop: '2px' }} />
                       <span>
-                        El pago en línea todavía no está habilitado.
                         {formData.tipoServicio === 'DOMICILIO'
-                          ? ' Para domicilio, el pago en línea exige pago anticipado antes de confirmar el pedido.'
-                          : ' Elige pago en efectivo para continuar.'}
+                          ? 'Pago a domicilio en línea: requiere pago anticipado. El saldo se registrará en el resumen del pedido.'
+                          : 'Pago en línea para llevar: selecciona este método y registra el pago en el resumen del pedido.'}
                       </span>
                     </div>
                   )}
@@ -429,8 +426,8 @@ function PedidoInvitado() {
                   type="submit"
                   className="btn w-100 mt-3"
                   style={{ ...btnPrimario, minHeight: '50px' }}
-                  disabled={loading || pagoEnLineaSeleccionado}
-                  title={pagoEnLineaSeleccionado ? 'El pago en línea aún no está disponible.' : 'Confirmar pedido'}
+                  disabled={loading}
+                  title={pagoEnLineaSeleccionado ? 'El pago se registrará en el resumen del pedido.' : 'Confirmar pedido'}
                 >
                   {loading ? (
                     <>
@@ -438,7 +435,7 @@ function PedidoInvitado() {
                       Creando pedido...
                     </>
                   ) : pagoEnLineaSeleccionado ? (
-                    <><FiLock style={{ marginRight: '6px' }} /> Pago en línea no disponible</>
+                    <><FiLock style={{ marginRight: '6px' }} /> Confirmar (pendiente de pago)</>
                   ) : (
                     `Confirmar pedido (${formatoPrecio(total)})`
                   )}

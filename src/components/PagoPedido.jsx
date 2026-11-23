@@ -7,6 +7,7 @@ import {
   confirmarPago,
   obtenerPago,
   registrarMontoEfectivo,
+  registrarPagoEnLinea,
   seleccionarMetodoPago
 } from '../services/pagos.js'
 import { obtenerMensajeError } from '../services/mensajes.js'
@@ -28,7 +29,8 @@ const ROLES_CONFIRMACION = ['MESERO', 'ADMINISTRADOR', 'SUPERADMIN']
 const METODOS = [
   { valor: 'EFECTIVO', etiqueta: 'Efectivo', icono: FiDollarSign },
   { valor: 'TARJETA', etiqueta: 'Tarjeta', icono: FiCreditCard },
-  { valor: 'CONTRA_ENTREGA', etiqueta: 'Contra entrega', icono: FiTruck, soloDomicilio: true }
+  { valor: 'CONTRA_ENTREGA', etiqueta: 'Contra entrega', icono: FiTruck, soloDomicilio: true },
+  { valor: 'PAGO_EN_LINEA', etiqueta: 'Pago en línea', icono: FiLock, soloEnLinea: true }
 ]
 
 function mensajeDeError(err) {
@@ -61,6 +63,9 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const [monto, setMonto] = useState(
     pagoInicial?.pagoImporteRecibido > 0 ? String(pagoInicial.pagoImporteRecibido) : ''
   )
+  const [referencia, setReferencia] = useState('')
+  const [modoPagoEnLinea, setModoPagoEnLinea] = useState(false)
+  const requiereAnticipo = Boolean(pagoInicial?.pagoAnticipo)
 
   const cargar = useCallback(async () => {
     if (!pedidoId) return
@@ -142,6 +147,65 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
           ? `Monto registrado. Cambio calculado por el servidor: ${formatearDinero(datos.pagoCambio)}.`
           : 'Monto registrado. No hay cambio pendiente.'
       )
+    } catch (err) {
+      manejarErrorOperacion(err)
+    } finally {
+      setProcesando('')
+    }
+  }
+
+  const cambiarMetodo = async (metodo) => {
+    if (procesando || pagado || cancelado || !accionesDisponibles) return
+    setProcesando(metodo)
+    setError('')
+    setAviso('')
+    try {
+      const datos = await seleccionarMetodoPago(pedidoId, metodo)
+      setPago(datos)
+      setAviso(`Método de pago actualizado a ${etiquetaMetodoPago(datos.pagoMetodo)}.`)
+      setModoPagoEnLinea(metodo === 'PAGO_EN_LINEA')
+      if (datos.pagoMetodo !== 'EFECTIVO' && datos.pagoMetodo !== 'CONTRA_ENTREGA') {
+        setMonto('')
+      }
+      if (metodo === 'PAGO_EN_LINEA') {
+        setReferencia('')
+      }
+    } catch (err) {
+      manejarErrorOperacion(err)
+    } finally {
+      setProcesando('')
+    }
+  }
+
+  const registrarPagoEnLineaHandler = async () => {
+    if (procesando || pagado || cancelado || !accionesDisponibles) return
+    const valor = Number(String(monto).replace(',', '.'))
+    if (!Number.isFinite(valor) || valor <= 0) {
+      setError('Ingresa un monto válido.')
+      return
+    }
+    if (!referencia || referencia.trim().length === 0) {
+      setError('La referencia del pago es obligatoria.')
+      return
+    }
+    if (referencia.trim().length > 100) {
+      setError('La referencia admite hasta 100 caracteres.')
+      return
+    }
+    setProcesando('pago-en-linea')
+    setError('')
+    setAviso('')
+    try {
+      const esAnticipo = requiereAnticipo && valor < Number(pagoActual?.total || 0)
+      const datos = await registrarPagoEnLinea(pedidoId, valor, referencia.trim(), esAnticipo)
+      setPago(datos)
+      setAviso(
+        esAnticipo
+          ? `Pago anticipado registrado (${formatearDinero(datos.pagoImporteRecibido)}). Falta saldo por completar.`
+          : 'Pago en línea registrado correctamente.'
+      )
+      setReferencia('')
+      setMonto('')
     } catch (err) {
       manejarErrorOperacion(err)
     } finally {
@@ -266,6 +330,21 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
         }}>
           <FiXCircle style={{ marginRight: '5px' }} />
           El pago fue rechazado. Puedes intentar nuevamente.
+        </div>
+      )}
+
+      {requiereAnticipo && !pagado && (
+        <div role="status" style={{
+          marginTop: '10px', backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
+          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px'
+        }}>
+          <FiLock style={{ flexShrink: 0 }} />
+          <span>
+            Este pedido requiere <strong>pago anticipado</strong>.
+            {estadoPago === 'PARCIAL'
+              ? ` Se ha recibido un anticipo de ${formatearDinero(pagoActual?.pagoImporteRecibido || 0)}. Falta completar el saldo.`
+              : ' Debe registrarse un pago antes de confirmar el pedido.'}
+          </span>
         </div>
       )}
 
@@ -410,6 +489,44 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
               <FiLock style={{ marginRight: '5px' }} />
               El pago será confirmado por el personal autorizado (mesero o administrador).
             </small>
+          )}
+
+          {metodoActual === 'PAGO_EN_LINEA' && (
+            <div style={{ marginTop: '12px' }}>
+              <label htmlFor={`referencia-pago-${pedidoId}`} style={{
+                display: 'block', color: colores.textoSuave, fontWeight: 600, marginBottom: '6px', fontSize: '12.5px'
+              }}>
+                Referencia del pago en línea
+              </label>
+              <input
+                id={`referencia-pago-${pedidoId}`}
+                type="text"
+                maxLength="100"
+                value={referencia}
+                disabled={Boolean(procesando)}
+                onChange={(event) => setReferencia(event.target.value)}
+                placeholder="Ej: TRX-123456"
+                style={{ ...input, width: '100%', padding: '0 10px' }}
+              />
+              <div style={{ marginTop: '8px' }}>
+                <button
+                  type="button"
+                  className="btn w-100"
+                  disabled={Boolean(procesando) || !referencia.trim()}
+                  onClick={registrarPagoEnLineaHandler}
+                  style={{ ...btnPrimario, minHeight: '44px', marginTop: '8px' }}
+                >
+                  {procesando === 'pago-en-linea'
+                    ? 'Registrando pago en línea…'
+                    : 'Registrar pago en línea'}
+                </button>
+              </div>
+              <small style={{ display: 'block', color: colores.textoSuave, marginTop: '5px' }}>
+                {requiereAnticipo
+                  ? 'Pago anticipado: el saldo restante se puede completar en otro pago.'
+                  : 'El monto debe cubrir el total del pedido para marcarlo como pagado.'}
+              </small>
+            </div>
           )}
 
           {!metodoActual && (

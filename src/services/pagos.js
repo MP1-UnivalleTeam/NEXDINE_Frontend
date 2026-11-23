@@ -30,3 +30,13 @@ export async function confirmarPago(pedidoId) {
   const response = await api.post(`/api/pedidos/${pedidoId}/pago/confirmar`)
   return response.data
 }
+
+export async function registrarPagoEnLinea(pedidoId, monto, referencia, anticipo = false) {
+  const params = new URLSearchParams()
+  params.append('monto', String(monto))
+  params.append('referencia', referencia)
+  params.append('anticipo', String(anticipo))
+
+  const response = await api.post(`/api/pedidos/${pedidoId}/pago/en-linea`, params)
+  return response.data
+}
