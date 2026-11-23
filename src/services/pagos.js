@@ -34,9 +34,3 @@ export async function registrarPagoEnLinea(pedidoId, monto, referencia, anticipo
   return response.data
 }
 
-export async function cancelarPago(pedidoId) {
-  const response = await api.put(`/api/pedidos/${pedidoId}/estado`, null, {
-    params: { estado: 'CANCELADO' }
-  })
-  return response.data
-}

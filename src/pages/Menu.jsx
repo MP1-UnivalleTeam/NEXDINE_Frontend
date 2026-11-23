@@ -41,9 +41,10 @@ function Menu() {
   const { slug } = useParams()
   const navigate = useNavigate()
 
-  // Dos flujos coexistentes e independientes:
+  // Tres flujos coexistentes e independientes:
   //   /menu?mesa=<codigo>  → QR de mesa (con sesión temporal)
   //   /menu/<slug>         → enlace público (sin sesión)
+  //   /menu                → cliente autenticado desde su panel
   const esMenuPublico = Boolean(slug)
   const codigoMesa = esMenuPublico ? null : searchParams.get('mesa')
 
@@ -76,6 +77,7 @@ function Menu() {
   const [favoritoEnCurso, setFavoritoEnCurso] = useState(() => new Set())
   const [errorFavorito, setErrorFavorito] = useState('')
   const esCliente = usuario?.rol === 'CLIENTE'
+  const esClienteAutenticado = esCliente && !cargandoSesion
 
   // Carrito
   const {
@@ -90,13 +92,21 @@ function Menu() {
       return
     }
 
-    if (!codigoMesa) {
-      setError('Escanea el código QR de tu mesa para abrir el menú.')
-      setLoading(false)
+    if (codigoMesa) {
+      cargarMenu()
       return
     }
-    cargarMenu()
-  }, [codigoMesa, slug])
+
+    if (cargandoSesion) return
+
+    if (esClienteAutenticado) {
+      cargarMenuDelCliente()
+      return
+    }
+
+    setError('Escanea el código QR de tu mesa para abrir el menú.')
+    setLoading(false)
+  }, [codigoMesa, slug, esClienteAutenticado, cargandoSesion])
 
   useEffect(() => {
     let cancelado = false
@@ -117,6 +127,9 @@ function Menu() {
         }
       })
       .catch(() => {})
+      .finally(() => {
+        if (!cancelado) setCargandoSesion(false)
+      })
 
     return () => { cancelado = true }
   }, [])
@@ -134,11 +147,12 @@ function Menu() {
 
   /**
    * Menú público por slug. NO crea sesión, NO usa sessionStorage.
+   * `slugMenu` permite reutilizar el mismo enlace público desde el panel del cliente.
    */
-  const cargarMenuPublico = async (sucursalId = undefined) => {
+  const cargarMenuPublico = async (sucursalId = undefined, slugMenu = slug) => {
     setLoading(true)
     try {
-      let response = await api.get(`/api/menu/${slug}`)
+      let response = await api.get(`/api/menu/${encodeURIComponent(slugMenu)}`)
       const sucursales = response.data.sucursales || []
       const sucursalActual = sucursalId === undefined ? sucursal?.id : sucursalId
       const sucursalValida = sucursales.some(
@@ -146,7 +160,7 @@ function Menu() {
       )
 
       if (sucursalActual && sucursalValida) {
-        response = await api.get(`/api/menu/${slug}`, {
+        response = await api.get(`/api/menu/${encodeURIComponent(slugMenu)}`, {
           params: { sucursalId: sucursalActual }
         })
       } else if (sucursal?.id && !sucursalValida) {
@@ -168,6 +182,27 @@ function Menu() {
     } finally {
       setLoading(false)
     }
+  }
+
+  /**
+   * Cliente autenticado desde el panel: reutiliza el enlace público que el
+   * sistema ya guardó para el menú y aplica la sucursal del cliente si existe.
+   */
+  const cargarMenuDelCliente = async () => {
+    const contexto = obtenerContextoMenu()
+    const slugMenu = contexto && contexto.startsWith('/menu/')
+      ? decodeURIComponent(contexto.replace(/^\/menu\//, '').split('?')[0])
+      : null
+
+    if (!slugMenu) {
+      setError('No fue posible abrir el menú desde tu panel. Solicita el enlace público del menú al restaurante o abre el menú con el QR de tu mesa.')
+      setLoading(false)
+      return
+    }
+
+    const sucursalId = usuario?.sucursalId
+    await cargarMenuPublico(sucursalId ? String(sucursalId) : undefined, slugMenu)
+    guardarContextoMenu(`/menu/${slugMenu}`)
   }
 
   /**
@@ -250,6 +285,8 @@ function Menu() {
         return
       }
 
+      if (esClienteAutenticado) return
+
       // QR → mantener la sucursal/tasa del contexto de mesa
       const token = sessionStorage.getItem(CLAVE_TOKEN)
       if (!token) return
@@ -327,21 +364,21 @@ function Menu() {
   useEffect(() => {
     const intervalo = setInterval(actualizarMenuEnSegundoPlano, INTERVALO_MENU_MS)
     return () => clearInterval(intervalo)
-  }, [esMenuPublico, slug, sucursal?.id])
+  }, [esMenuPublico, slug, sucursal?.id, esClienteAutenticado])
 
   // Polling de revalidación de sesión cada 60s; se limpia al desmontar.
   useEffect(() => {
-    if (esMenuPublico) return
+    if (esMenuPublico || esClienteAutenticado) return
 
     const intervalo = setInterval(validarSesion, INTERVALO_VALIDACION_MS)
     return () => clearInterval(intervalo)
-  }, [esMenuPublico])
+  }, [esMenuPublico, esClienteAutenticado])
 
   // Al volver a la pestaña: revalida sesión y refresca el menú de inmediato.
   useEffect(() => {
     const alCambiarVisibilidad = () => {
       if (document.visibilityState === 'visible') {
-        if (!esMenuPublico) {
+        if (!esMenuPublico && !esClienteAutenticado) {
           validarSesion()
         }
         actualizarMenuEnSegundoPlano()
@@ -349,7 +386,7 @@ function Menu() {
     }
     document.addEventListener('visibilitychange', alCambiarVisibilidad)
     return () => document.removeEventListener('visibilitychange', alCambiarVisibilidad)
-  }, [esMenuPublico, slug, sucursal?.id])
+  }, [esMenuPublico, slug, sucursal?.id, esClienteAutenticado])
 
   const cambiarSucursalPublica = (nuevaSucursal) => {
     setSucursal(nuevaSucursal)
@@ -569,7 +606,7 @@ function Menu() {
                   <FiHeart style={{ marginRight: '6px', color: colores.error }} /> Mis favoritos
                 </button>
               )}
-              {!esMenuPublico && (
+              {codigoMesa && (
                 <span style={estiloBadge(colores.exitoFondo, colores.exitoTexto)}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: colores.exito }} />
                   Sesión activa

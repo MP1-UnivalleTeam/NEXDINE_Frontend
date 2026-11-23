@@ -89,12 +89,7 @@ function Favoritos() {
 
   const irAlMenu = () => {
     const ruta = obtenerContextoMenu()
-    if (!ruta || ruta.includes('mesa=null')) {
-      setAviso('')
-      setError('Escanea el código QR de tu mesa para abrir el menú y guardar productos.')
-      return
-    }
-    navigate(ruta)
+    navigate(ruta && !ruta.includes('mesa=null') ? ruta : '/menu')
   }
 
   const rutaMenu = obtenerContextoMenu()
@@ -137,7 +132,7 @@ function Favoritos() {
             </small>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {tieneContextoMesa && (
+            {currentUser?.rol === 'CLIENTE' && (
               <button type="button" className="btn" onClick={irAlMenu} style={{ ...btnGhost, minHeight: '42px' }}>
                 <FiArrowLeft style={{ marginRight: '6px' }} /> Ir al menú
               </button>
@@ -175,9 +170,9 @@ function Favoritos() {
             <FiHeart style={{ fontSize: '2rem', color: colores.textoSuaveClaro }} />
             <div style={{ fontWeight: 700, color: colores.texto, marginTop: '8px' }}>Todavía no tienes favoritos</div>
             <small style={{ display: 'block', marginBottom: '14px' }}>
-              Abre el menú desde el código QR de tu mesa y toca el corazón de los productos que quieras guardar.
+              Entra al menú desde el apartado "Menú" de tu panel o abre el menú con el código QR de tu mesa, y toca el corazón de los productos que quieras guardar.
             </small>
-            {tieneContextoMesa ? (
+            {currentUser?.rol === 'CLIENTE' ? (
               <button type="button" className="btn" onClick={irAlMenu} style={{ ...btnPrimario, minHeight: '42px' }}>
                 Explorar el menú
               </button>
@@ -266,7 +261,7 @@ function Favoritos() {
           display: 'flex', alignItems: 'center', gap: '8px',
           color: colores.textoSuave, fontSize: '12px', marginTop: '18px'
         }}>
-          <FiTrash2 /> Quita un favorito con el corazón de la tarjeta. Para agregar más, escanea el QR de tu mesa.
+          <FiTrash2 /> Quita un favorito con el corazón de la tarjeta. Para agregar más, entra al apartado "Menú" de tu panel o escanea el QR de tu mesa.
         </div>
       </div>
 
