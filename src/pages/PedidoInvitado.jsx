@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiArrowLeft, FiUser, FiMapPin, FiPhone, FiCheckCircle, FiClipboard, FiCreditCard, FiDollarSign, FiTruck, FiLock } from 'react-icons/fi'
+import { FiArrowLeft, FiUser, FiMapPin, FiPhone, FiCheckCircle, FiClipboard, FiCreditCard, FiDollarSign, FiRepeat } from 'react-icons/fi'
 import { crearPedidoInvitado, agregarItemPedido, confirmarPedido } from '../services/pedidos.js'
+import { seleccionarMetodoPago } from '../services/pagos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { obtenerMensajeError } from '../services/mensajes.js'
-import { metodosPagoParaServicio, etiquetaMetodoPago, esPagoEnLinea } from '../utils/pagos.js'
+import { metodosPagoParaServicio, etiquetaMetodoPago } from '../utils/pagos.js'
 import SelectorSucursal from '../components/SelectorSucursal.jsx'
 import {
   obtenerSucursalesDisponibles,
@@ -16,9 +17,9 @@ import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, 
 const formatoPrecio = formatearDinero
 
 const ICONOS_METODO = {
-  PAGO_EN_LINEA: FiCreditCard,
   EFECTIVO: FiDollarSign,
-  CONTRA_ENTREGA: FiTruck
+  TARJETA: FiCreditCard,
+  TRANSFERENCIA: FiRepeat
 }
 
 /**
@@ -72,7 +73,6 @@ function PedidoInvitado() {
   ]
 
   const metodosDisponibles = metodosPagoParaServicio(formData.tipoServicio)
-  const pagoEnLineaSeleccionado = esPagoEnLinea(metodoPago)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -98,14 +98,6 @@ function PedidoInvitado() {
       setError('Selecciona un método de pago para continuar.')
       return
     }
-    if (pagoEnLineaSeleccionado) {
-      setError(
-        formData.tipoServicio === 'DOMICILIO'
-          ? 'El pedido a domicilio con pago en línea requiere pago anticipado. El pago en línea aún no está habilitado; elige contra entrega para continuar.'
-          : 'El pago en línea aún no está habilitado. Elige pago en efectivo para continuar.'
-      )
-      return
-    }
 
     setLoading(true)
     try {
@@ -117,6 +109,12 @@ function PedidoInvitado() {
         referencia: formData.referencia.trim(),
         sucursalId: sucursal.id
       })
+
+      try {
+        await seleccionarMetodoPago(pedido.id, metodoPago)
+      } catch (err) {
+        throw new Error(obtenerMensajeError(err, 'No fue posible registrar el método de pago.'))
+      }
 
       // Agregar items al pedido. El backend revalida la disponibilidad
       // por sucursal en cada item; si uno falla, se aborta con un mensaje
@@ -181,14 +179,19 @@ function PedidoInvitado() {
           <p style={{ color: colores.textoSuave, fontSize: '13px', marginBottom: '4px' }}>
             Método de pago: <strong style={{ color: colores.texto }}>{etiquetaMetodoPago(metodoPago)}</strong>
           </p>
-          {metodoPago === 'CONTRA_ENTREGA' && (
-            <p style={{ color: colores.textoSuave, fontSize: '12.5px', marginBottom: '12px' }}>
-              <FiTruck style={{ marginRight: '5px' }} /> Pagarás al recibir tu pedido.
-            </p>
-          )}
           {metodoPago === 'EFECTIVO' && (
             <p style={{ color: colores.textoSuave, fontSize: '12.5px', marginBottom: '12px' }}>
-              <FiDollarSign style={{ marginRight: '5px' }} /> Pagarás en efectivo al recoger tu pedido.
+              <FiDollarSign style={{ marginRight: '5px' }} /> Pagarás en efectivo al recibir o recoger tu pedido.
+            </p>
+          )}
+          {metodoPago === 'TARJETA' && (
+            <p style={{ color: colores.textoSuave, fontSize: '12.5px', marginBottom: '12px' }}>
+              <FiCreditCard style={{ marginRight: '5px' }} /> El pago con tarjeta queda pendiente de confirmación.
+            </p>
+          )}
+          {metodoPago === 'TRANSFERENCIA' && (
+            <p style={{ color: colores.textoSuave, fontSize: '12.5px', marginBottom: '12px' }}>
+              <FiRepeat style={{ marginRight: '5px' }} /> El restaurante confirmará tu pago al verificar la transferencia.
             </p>
           )}
           <p style={{ color: colores.textoSuave, fontSize: '13px' }}>
@@ -390,26 +393,10 @@ function PedidoInvitado() {
                     })}
                   </div>
 
-                  {metodoPago && !pagoEnLineaSeleccionado && (
+                  {metodoPago && (
                     <small style={{ display: 'block', color: colores.textoSuave, marginTop: '7px' }}>
                       {metodosDisponibles.find(opcion => opcion.valor === metodoPago)?.descripcion}
                     </small>
-                  )}
-
-                  {pagoEnLineaSeleccionado && (
-                    <div style={{
-                      marginTop: '8px', backgroundColor: colores.advertenciaFondo,
-                      color: colores.advertenciaTexto, borderRadius: radios.sm,
-                      padding: '10px 12px', fontSize: '12.5px', display: 'flex', gap: '8px'
-                    }}>
-                      <FiLock style={{ flexShrink: 0, marginTop: '2px' }} />
-                      <span>
-                        El pago en línea todavía no está habilitado.
-                        {formData.tipoServicio === 'DOMICILIO'
-                          ? ' Para domicilio, el pago en línea exige pago anticipado antes de confirmar el pedido.'
-                          : ' Elige pago en efectivo para continuar.'}
-                      </span>
-                    </div>
                   )}
                 </div>
 
@@ -429,16 +416,13 @@ function PedidoInvitado() {
                   type="submit"
                   className="btn w-100 mt-3"
                   style={{ ...btnPrimario, minHeight: '50px' }}
-                  disabled={loading || pagoEnLineaSeleccionado}
-                  title={pagoEnLineaSeleccionado ? 'El pago en línea aún no está disponible.' : 'Confirmar pedido'}
+                  disabled={loading}
                 >
                   {loading ? (
                     <>
                       <span className="spinner-border spinner-border-sm me-2"></span>
                       Creando pedido...
                     </>
-                  ) : pagoEnLineaSeleccionado ? (
-                    <><FiLock style={{ marginRight: '6px' }} /> Pago en línea no disponible</>
                   ) : (
                     `Confirmar pedido (${formatoPrecio(total)})`
                   )}

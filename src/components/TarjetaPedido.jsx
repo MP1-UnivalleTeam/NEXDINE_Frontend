@@ -209,7 +209,7 @@ function TarjetaPedido({
 
       {actualizando && (
         <small role="status" style={{ color: colores.textoSuave, marginTop: '8px' }}>
-          Guardando el nuevo estado en el servidor…
+          Guardando el nuevo estado…
         </small>
       )}
     </article>

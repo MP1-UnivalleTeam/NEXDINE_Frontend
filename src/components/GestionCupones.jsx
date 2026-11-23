@@ -50,7 +50,7 @@ function GestionCupones({ onClose }) {
     try {
       const response = await api.get('/api/cupones/admin')
       if (!Array.isArray(response.data)) {
-        setError('El servidor devolvió un listado de cupones no válido.')
+        setError('No fue posible cargar los cupones.')
         return
       }
       setCupones(response.data)
@@ -276,7 +276,7 @@ function GestionCupones({ onClose }) {
               <h2 id="gestion-cupones-titulo" style={{ margin: 0, fontSize: '19px', color: colores.primario }}>
                 Gestión de cupones
               </h2>
-              <small style={{ color: colores.textoSuave }}>Los cambios se guardan en la API de NEXDINE.</small>
+              <small style={{ color: colores.textoSuave }}>Los cambios se guardan automáticamente.</small>
             </div>
           </div>
           <button type="button" className="btn btn-link" aria-label="Cerrar gestión de cupones"

@@ -412,6 +412,7 @@ function Pedidos() {
                   >
                     <option value="">Todos</option>
                     <option value="PENDIENTE">Pendiente</option>
+                    <option value="PARCIAL">Parcial</option>
                     <option value="APROBADO">Pagado</option>
                     <option value="RECHAZADO">Rechazado</option>
                     <option value="CANCELADO">Cancelado</option>
@@ -453,7 +454,7 @@ function Pedidos() {
             <small>
               {tab === 'activos'
                 ? 'Los pedidos entregados o cancelados dejan de aparecer en esta lista.'
-                : 'La vista se actualiza automáticamente desde el servidor.'}
+                : 'La vista se actualiza automáticamente.'}
             </small>
           </div>
         ) : pedidosFiltrados.length === 0 ? (
@@ -490,9 +491,9 @@ function Pedidos() {
           <FiActivity />
           {tab === 'activos'
             ? (enTiempoReal
-              ? 'Los cambios de estado se reciben en tiempo real desde el servidor.'
+              ? 'Los cambios de estado se reciben en tiempo real.'
               : 'La lista se sincroniza automáticamente cada 15 segundos.')
-            : 'La vista se sincroniza automáticamente con el servidor.'}
+            : 'La vista se sincroniza automáticamente.'}
         </div>
       </div>
 

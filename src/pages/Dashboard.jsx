@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FiPlus } from 'react-icons/fi'
 import api from '../services/api.js'
@@ -9,7 +9,6 @@ import { colores, tarjeta } from '../styles/tokens.js'
 function Dashboard() {
   const [currentUser, setCurrentUser] = useState(null)
   const [users, setUsers] = useState([])
-  const [searchedUser, setSearchedUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
@@ -23,6 +22,9 @@ function Dashboard() {
     sucursalId: ''
   })
 
+  // Tipo de registro elegido en el modal de creación
+  const [tipoRegistro, setTipoRegistro] = useState(null)
+
   // Sucursales permitidas para asignar
   const [sucursales, setSucursales] = useState([])
 
@@ -30,8 +32,15 @@ function Dashboard() {
   const [successMessage, setSuccessMessage] = useState('')
   const [formError, setFormError] = useState('')
 
-  // Búsqueda
+  // Búsqueda por ID visual
   const [searchId, setSearchId] = useState('')
+  const [filtroId, setFiltroId] = useState(null)
+  const [busquedaError, setBusquedaError] = useState('')
+
+  // Estado de operaciones para evitar dobles envíos
+  const [creandoUsuario, setCreandoUsuario] = useState(false)
+  const [actualizandoUsuario, setActualizandoUsuario] = useState(false)
+  const [procesandoAccion, setProcesandoAccion] = useState('')
 
   // Modal de edición
   const [showEditModal, setShowEditModal] = useState(false)
@@ -46,6 +55,25 @@ function Dashboard() {
   const [editUserSucursalLoading, setEditUserSucursalLoading] = useState(false)
   const [editUserSucursalError, setEditUserSucursalError] = useState('')
   const editUserSucursalRequest = useRef(0)
+
+  /**
+   * El servicio identifica a los usuarios por UUID. La tabla muestra un ID
+   * numérico secuencial según el orden del listado cargado; las operaciones
+   * siguen usando el UUID real de cada usuario.
+   */
+  const usuariosConId = useMemo(
+    () => users.map((user, indice) => ({ ...user, idVisual: indice + 1 })),
+    [users]
+  )
+
+  const usuariosVisibles = useMemo(
+    () => (filtroId == null
+      ? usuariosConId
+      : usuariosConId.filter(user => user.idVisual === filtroId)),
+    [usuariosConId, filtroId]
+  )
+
+  const busquedaSinResultados = filtroId != null && usuariosVisibles.length === 0
 
   useEffect(() => {
     checkAuth()
@@ -109,6 +137,7 @@ function Dashboard() {
         closeEditUserModal()
       } else {
         setShowCreateUserModal(false)
+        setTipoRegistro(null)
         setFormError('')
       }
     }
@@ -119,6 +148,7 @@ function Dashboard() {
 
   const openCreateUserModal = () => {
     setFormError('')
+    setTipoRegistro(null)
     setNewUser({
       nombre: '',
       contraseña: '',
@@ -128,6 +158,20 @@ function Dashboard() {
       sucursalId: ''
     })
     setShowCreateUserModal(true)
+  }
+
+  const elegirTipoRegistro = (tipo) => {
+    if (tipo === 'ADMINISTRADOR' && !esSuperadmin()) {
+      setFormError('Solo el superadministrador puede registrar al dueño de la empresa.')
+      return
+    }
+    setFormError('')
+    setTipoRegistro(tipo)
+    setNewUser(prev => ({
+      ...prev,
+      rol: tipo === 'CLIENTE' ? 'CLIENTE' : tipo === 'ADMINISTRADOR' ? 'ADMINISTRADOR' : 'MESERO',
+      sucursalId: ''
+    }))
   }
 
   /**
@@ -165,38 +209,59 @@ function Dashboard() {
 
   const closeCreateUserModal = () => {
     setShowCreateUserModal(false)
+    setTipoRegistro(null)
     setFormError('')
   }
 
   const handleCreateUser = async (e) => {
     e.preventDefault()
+    if (creandoUsuario) return
     setFormError('')
     setSuccessMessage('')
+
+    if (!tipoRegistro) {
+      setFormError('Selecciona el tipo de registro.')
+      return
+    }
+
+    if (tipoRegistro === 'ADMINISTRADOR' && !esSuperadmin()) {
+      setFormError('Solo el superadministrador puede registrar al dueño de la empresa.')
+      return
+    }
 
     if (!newUser.nombre.trim()) {
       setFormError('El nombre de usuario es obligatorio')
       return
     }
 
-    // La sucursal es opcional: puede quedar "Sin asignar" y asignarse después
-    if (requiereSucursal(newUser.rol) && esSuperadmin() && !newUser.sucursalId) {
-      // Sin sucursal: el usuario se crea pero no tendrá contexto operativo
-    }
+    const rol = tipoRegistro === 'CLIENTE'
+      ? 'CLIENTE'
+      : tipoRegistro === 'ADMINISTRADOR'
+        ? 'ADMINISTRADOR'
+        : (newUser.rol === 'COCINERO' ? 'COCINERO' : 'MESERO')
 
     const params = new URLSearchParams()
     params.append('nombre', newUser.nombre.trim())
     params.append('contraseña', newUser.contraseña)
-    params.append('rol', newUser.rol)
+    params.append('rol', rol)
     params.append('celular', newUser.celular)
     params.append('direccion', newUser.direccion)
     if (esSuperadmin() && newUser.sucursalId) {
       params.append('sucursalId', newUser.sucursalId)
     }
 
+    setCreandoUsuario(true)
     try {
       await api.post('/users/create', params)
-      setSuccessMessage(MENSAJES.USUARIO_CREADO)
+      setSuccessMessage(
+        tipoRegistro === 'CLIENTE'
+          ? 'Cliente registrado correctamente.'
+          : tipoRegistro === 'ADMINISTRADOR'
+            ? 'Dueño de la empresa registrado correctamente.'
+            : MENSAJES.USUARIO_CREADO
+      )
       setShowCreateUserModal(false)
+      setTipoRegistro(null)
       setNewUser({ nombre: '', contraseña: '', rol: 'COCINERO', celular: '', direccion: '', sucursalId: '' })
       await loadUsers()
       setTimeout(() => setSuccessMessage(''), 3000)
@@ -210,17 +275,27 @@ function Dashboard() {
       } else {
         setFormError(obtenerMensajeError(err, 'No fue posible crear el usuario.'))
       }
+    } finally {
+      setCreandoUsuario(false)
     }
   }
 
-  const handleSearch = async (e) => {
+  const handleSearch = (e) => {
     e.preventDefault()
-    try {
-      const response = await api.get(`/users/search?id=${searchId}`)
-      setSearchedUser(response.data)
-    } catch (err) {
-      setSearchedUser(null)
+    const valor = Number(searchId)
+    if (!Number.isInteger(valor) || valor <= 0) {
+      setBusquedaError('Ingresa un ID numérico válido.')
+      setFiltroId(null)
+      return
     }
+    setBusquedaError('')
+    setFiltroId(valor)
+  }
+
+  const limpiarBusqueda = () => {
+    setSearchId('')
+    setFiltroId(null)
+    setBusquedaError('')
   }
 
   const handleEdit = (user) => {
@@ -244,6 +319,7 @@ function Dashboard() {
 
   const handleUpdateUser = async (e) => {
     e.preventDefault()
+    if (actualizandoUsuario) return
     setFormError('')
     if (esSuperadmin() && (editUserSucursalLoading || editUserSucursalError)) {
       setFormError('Consulta la sucursal asignada antes de guardar los cambios.')
@@ -263,6 +339,7 @@ function Dashboard() {
       }
     }
 
+    setActualizandoUsuario(true)
     try {
       await api.post('/users/edit', params)
       setShowEditModal(false)
@@ -271,13 +348,16 @@ function Dashboard() {
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (err) {
       setFormError(obtenerMensajeError(err, 'No fue posible actualizar el usuario.'))
+    } finally {
+      setActualizandoUsuario(false)
     }
   }
 
   const handleDelete = async (user) => {
-    if (!window.confirm(`¿Eliminar a ${user.nombre}?`)) return
+    if (procesandoAccion || !window.confirm(`¿Eliminar a ${user.nombre}?`)) return
     const params = new URLSearchParams()
     params.append('id', user.id)
+    setProcesandoAccion(`delete:${user.id}`)
     try {
       await api.post('/users/delete', params)
       setSuccessMessage(MENSAJES.USUARIO_ELIMINADO)
@@ -286,13 +366,17 @@ function Dashboard() {
     } catch (err) {
       setFormError(obtenerMensajeError(err, 'No fue posible eliminar el usuario.'))
       setTimeout(() => setFormError(''), 4000)
+    } finally {
+      setProcesandoAccion('')
     }
   }
 
   const handleToggle = async (user) => {
+    if (procesandoAccion) return
     setFormError('')
     const params = new URLSearchParams()
     params.append('id', user.id)
+    setProcesandoAccion(`toggle:${user.id}`)
     try {
       await api.post('/users/toggle', params)
       setSuccessMessage(user.estado ? MENSAJES.USUARIO_SUSPENDIDO : MENSAJES.USUARIO_ACTIVADO)
@@ -301,6 +385,8 @@ function Dashboard() {
     } catch (err) {
       setFormError(obtenerMensajeError(err, 'No fue posible cambiar el estado del usuario.'))
       setTimeout(() => setFormError(''), 4000)
+    } finally {
+      setProcesandoAccion('')
     }
   }
 
@@ -311,6 +397,14 @@ function Dashboard() {
   if (!currentUser) return null
 
   const isAdmin = () => currentUser?.rol === 'ADMINISTRADOR' || currentUser?.rol === 'SUPERADMIN'
+
+  const tituloRegistro = tipoRegistro === 'CLIENTE'
+    ? 'Registrar cliente'
+    : tipoRegistro === 'ADMINISTRADOR'
+      ? 'Registrar dueño de la empresa'
+      : tipoRegistro === 'COLABORADOR'
+        ? 'Registrar colaborador'
+        : 'Registrar usuario'
 
   const getRoleBadge = (rol) => {
     const styles = {
@@ -387,7 +481,7 @@ function Dashboard() {
                   style={{ backgroundColor: colores.primario, color: 'white' }}
                   onClick={openCreateUserModal}
                 >
-                  <FiPlus style={{ marginRight: '5px' }} /> Crear Usuario
+                  <FiPlus style={{ marginRight: '5px' }} /> Registrar usuario
                 </button>
               </div>
             )}
@@ -407,37 +501,58 @@ function Dashboard() {
                 </h5>
                 <form onSubmit={handleSearch}>
                   <div className="row g-2 align-items-end">
-                    <div className="col-md-10">
+                    <div className="col-md-8">
                       <label className="form-label small fw-semibold">ID del usuario</label>
                       <input
                         type="number"
+                        min="1"
+                        step="1"
                         className="form-control form-control-sm"
-                        placeholder="Ingrese el ID del usuario"
+                        placeholder="Ej: 1"
                         required
                         value={searchId}
-                        onChange={(e) => setSearchId(e.target.value)}
+                        onChange={(e) => { setSearchId(e.target.value); setBusquedaError('') }}
                       />
+                      <small className="text-muted">Es el número que aparece en la columna ID.</small>
                     </div>
                     <div className="col-md-2">
                       <button type="submit" className="btn btn-sm w-100" style={{ backgroundColor: colores.primario, color: 'white' }}>
                         <i className="fa-solid fa-search me-1"></i>Buscar
                       </button>
                     </div>
+                    <div className="col-md-2">
+                      <button type="button" className="btn btn-sm btn-outline-secondary w-100" onClick={limpiarBusqueda}>
+                        Limpiar
+                      </button>
+                    </div>
                   </div>
+                  {busquedaError && (
+                    <div className="text-danger small mt-2" role="alert">{busquedaError}</div>
+                  )}
                 </form>
               </div>
             )}
 
-            {/* Resultado de búsqueda */}
-            {searchedUser && (
-              <div className="card p-3 mb-3 border-success">
-                <h5 className="text-success">
-                  <i className="fa-solid fa-circle-check me-2"></i>
-                  Usuario encontrado
-                </h5>
-                <p><strong>ID:</strong> <span>{searchedUser.id}</span></p>
-                <p><strong>nombre:</strong> <span>{searchedUser.nombre}</span></p>
-                <p><strong>Rol:</strong> <span>{searchedUser.rol}</span></p>
+            {/* Estado de la búsqueda */}
+            {filtroId != null && (
+              <div className="card p-3 mb-3" style={tarjeta}>
+                {busquedaSinResultados ? (
+                  <div className="alert alert-warning py-2 small mb-0 d-flex justify-content-between align-items-center gap-2 flex-wrap" role="status">
+                    <span><i className="fa-solid fa-circle-info me-1"></i>No existe un usuario con el ID {filtroId}.</span>
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={limpiarBusqueda}>
+                      Ver todos
+                    </button>
+                  </div>
+                ) : (
+                  <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                    <span className="small text-muted">
+                      <i className="fa-solid fa-filter me-1"></i>Mostrando el usuario con ID {filtroId}.
+                    </span>
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={limpiarBusqueda}>
+                      Limpiar búsqueda
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -457,9 +572,16 @@ function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map(user => (
+                  {usuariosVisibles.length === 0 && (
+                    <tr>
+                      <td colSpan={isAdmin() ? 8 : 7} className="text-center text-muted py-4">
+                        No hay usuarios para mostrar.
+                      </td>
+                    </tr>
+                  )}
+                  {usuariosVisibles.map(user => (
                     <tr key={user.id}>
-                      <td><span style={{ fontSize: '0.75rem', color: '#888', fontFamily: 'monospace' }}>#{user.id}</span></td>
+                      <td><strong>#{user.idVisual}</strong></td>
                       <td><strong>{user.nombre}</strong></td>
                       <td>{getRoleBadge(user.rol)}</td>
                       <td className="text-muted">
@@ -487,6 +609,7 @@ function Dashboard() {
                           <button
                             className={`btn btn-sm ${user.estado ? 'btn-outline-warning' : 'btn-outline-success'}`}
                             title={user.estado ? 'Suspender usuario' : 'Activar usuario'}
+                            disabled={Boolean(procesandoAccion)}
                             onClick={() => handleToggle(user)}
                           >
                             <i className={`fa-solid ${user.estado ? 'fa-ban' : 'fa-circle-check'}`}></i>
@@ -494,6 +617,7 @@ function Dashboard() {
                           <button
                             className="btn btn-sm btn-outline-primary ms-1"
                             title="Editar usuario"
+                            disabled={Boolean(procesandoAccion)}
                             onClick={() => handleEdit(user)}
                           >
                             <i className="fa-solid fa-pen"></i>
@@ -502,6 +626,7 @@ function Dashboard() {
                             <button
                               className="btn btn-sm btn-outline-danger ms-1"
                               title="Eliminar usuario"
+                              disabled={Boolean(procesandoAccion)}
                               onClick={() => handleDelete(user)}
                             >
                               <i className="fa-solid fa-trash"></i>
@@ -626,14 +751,14 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeEditUserModal}>Cancelar</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeEditUserModal} disabled={actualizandoUsuario}>Cancelar</button>
                     <button
                       type="submit"
                       className="btn btn-sm"
                       style={{ backgroundColor: colores.primario, color: 'white' }}
-                      disabled={editUserSucursalLoading || Boolean(editUserSucursalError)}
+                      disabled={actualizandoUsuario || editUserSucursalLoading || Boolean(editUserSucursalError)}
                     >
-                      Guardar cambios
+                      {actualizandoUsuario ? 'Guardando…' : 'Guardar cambios'}
                     </button>
                   </div>
                 </form>
@@ -660,7 +785,7 @@ function Dashboard() {
               <div className="modal-content">
                 <div className="modal-header" style={{ backgroundColor: colores.primario, color: 'white' }}>
                   <h5 className="modal-title">
-                    <FiPlus style={{ marginRight: '8px' }} />Crear nuevo usuario
+                    <FiPlus style={{ marginRight: '8px' }} />{tituloRegistro}
                   </h5>
                   <button type="button" className="btn-close btn-close-white" onClick={closeCreateUserModal}></button>
                 </div>
@@ -673,105 +798,200 @@ function Dashboard() {
                       </div>
                     )}
 
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">Nombre de usuario</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Ej: maria123"
-                        required
-                        value={newUser.nombre}
-                        onChange={(e) => setNewUser({ ...newUser, nombre: e.target.value })}
-                      />
-                    </div>
+                    {tipoRegistro === null ? (
+                      <>
+                        <p className="small text-muted mb-3">Selecciona el tipo de registro que deseas crear.</p>
 
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">Celular</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        placeholder="3001234567"
-                        required
-                        value={newUser.celular}
-                        onChange={(e) => setNewUser({ ...newUser, celular: e.target.value })}
-                      />
-                    </div>
+                        <button
+                          type="button"
+                          className="btn w-100 text-start mb-2"
+                          onClick={() => elegirTipoRegistro('CLIENTE')}
+                          style={{ border: `1px solid ${colores.borde}`, borderRadius: '12px', padding: '14px', backgroundColor: colores.tarjeta }}
+                        >
+                          <span className="d-flex align-items-center gap-3">
+                            <span style={{
+                              width: '40px', height: '40px', borderRadius: '50%', backgroundColor: colores.mint,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              color: colores.primario, flexShrink: 0
+                            }}>
+                              <i className="fa-solid fa-user"></i>
+                            </span>
+                            <span>
+                              <strong className="d-block" style={{ color: colores.texto }}>Registrar cliente</strong>
+                              <small className="text-muted">Crea una cuenta para que el cliente haga pedidos.</small>
+                            </span>
+                          </span>
+                        </button>
 
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">Contraseña</label>
-                      <input
-                        type="password"
-                        className="form-control"
-                        placeholder="Contraseña"
-                        required
-                        value={newUser.contraseña}
-                        onChange={(e) => setNewUser({ ...newUser, contraseña: e.target.value })}
-                      />
-                    </div>
+                        <button
+                          type="button"
+                          className="btn w-100 text-start mb-2"
+                          onClick={() => elegirTipoRegistro('ADMINISTRADOR')}
+                          style={{ border: `1px solid ${colores.borde}`, borderRadius: '12px', padding: '14px', backgroundColor: colores.tarjeta }}
+                        >
+                          <span className="d-flex align-items-center gap-3">
+                            <span style={{
+                              width: '40px', height: '40px', borderRadius: '50%', backgroundColor: colores.mint,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              color: colores.primario, flexShrink: 0
+                            }}>
+                              <i className="fa-solid fa-shield-halved"></i>
+                            </span>
+                            <span>
+                              <strong className="d-block" style={{ color: colores.texto }}>Registrar para el dueño de la empresa</strong>
+                              <small className="text-muted">Crea el administrador del restaurante.</small>
+                            </span>
+                          </span>
+                        </button>
 
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">Rol</label>
-                      <select
-                        className="form-select"
-                        value={newUser.rol}
-                        onChange={(e) => setNewUser({ ...newUser, rol: e.target.value, sucursalId: '' })}
-                      >
-                        {esSuperadmin() && <option value="ADMINISTRADOR">Administrador</option>}
-                        <option value="MESERO">Mesero</option>
-                        <option value="COCINERO">Cocinero</option>
-                        <option value="CLIENTE">Cliente</option>
-                      </select>
-                    </div>
-
-                    {/* Sucursal: solo si el rol la requiere */}
-                    {requiereSucursal(newUser.rol) && (
-                      <div className="mb-3">
-                        <label className="form-label small fw-semibold">Sucursal</label>
-                        {esSuperadmin() ? (
-                          <select
-                            className="form-select"
-                            value={newUser.sucursalId}
-                            onChange={(e) => setNewUser({ ...newUser, sucursalId: e.target.value })}
+                        <div className="text-center mt-2">
+                          <button
+                            type="button"
+                            className="btn btn-link btn-sm p-0"
+                            onClick={() => elegirTipoRegistro('COLABORADOR')}
                           >
-                            <option value="">Sin asignar</option>
-                            {sucursales.map(s => (
-                              <option key={s.id} value={s.id}>{s.nombre}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <>
+                            Registrar colaborador (mesero o cocinero)
+                          </button>
+                        </div>
+
+                        <small className="d-block text-muted text-center mt-2">
+                          Los clientes no aparecen en la tabla de personal.
+                        </small>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mb-3">
+                          <label className="form-label small fw-semibold">Nombre de usuario</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Ej: maria123"
+                            required
+                            value={newUser.nombre}
+                            onChange={(e) => setNewUser({ ...newUser, nombre: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="mb-3">
+                          <label className="form-label small fw-semibold">Celular</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            placeholder="3001234567"
+                            required
+                            value={newUser.celular}
+                            onChange={(e) => setNewUser({ ...newUser, celular: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="mb-3">
+                          <label className="form-label small fw-semibold">Contraseña</label>
+                          <input
+                            type="password"
+                            className="form-control"
+                            placeholder="Contraseña"
+                            required
+                            value={newUser.contraseña}
+                            onChange={(e) => setNewUser({ ...newUser, contraseña: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="mb-3">
+                          <label className="form-label small fw-semibold">Rol</label>
+                          {tipoRegistro === 'COLABORADOR' ? (
+                            <select
+                              className="form-select"
+                              value={newUser.rol}
+                              onChange={(e) => setNewUser({ ...newUser, rol: e.target.value, sucursalId: '' })}
+                            >
+                              <option value="MESERO">Mesero</option>
+                              <option value="COCINERO">Cocinero</option>
+                            </select>
+                          ) : (
                             <input
                               type="text"
                               className="form-control"
-                              value={sucursales[0]?.nombre || 'Su sucursal'}
                               disabled
+                              value={tipoRegistro === 'CLIENTE' ? 'Cliente' : 'Administrador (dueño de la empresa)'}
                             />
-                            <small className="text-muted">
-                              Se asignará automáticamente a su sucursal.
-                            </small>
-                          </>
-                        )}
-                      </div>
-                    )}
+                          )}
+                        </div>
 
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">Dirección</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Calle 123 #45-67"
-                        value={newUser.direccion}
-                        onChange={(e) => setNewUser({ ...newUser, direccion: e.target.value })}
-                      />
-                    </div>
+                        {/* Sucursal: solo si el rol la requiere */}
+                        {requiereSucursal(newUser.rol) && (
+                          <div className="mb-3">
+                            <label className="form-label small fw-semibold">Sucursal</label>
+                            {esSuperadmin() ? (
+                              <select
+                                className="form-select"
+                                value={newUser.sucursalId}
+                                onChange={(e) => setNewUser({ ...newUser, sucursalId: e.target.value })}
+                              >
+                                <option value="">Sin asignar</option>
+                                {sucursales.map(s => (
+                                  <option key={s.id} value={s.id}>{s.nombre}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={sucursales[0]?.nombre || 'Su sucursal'}
+                                  disabled
+                                />
+                                <small className="text-muted">
+                                  Se asignará automáticamente a su sucursal.
+                                </small>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="mb-3">
+                          <label className="form-label small fw-semibold">Dirección</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Calle 123 #45-67"
+                            value={newUser.direccion}
+                            onChange={(e) => setNewUser({ ...newUser, direccion: e.target.value })}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateUserModal}>
-                      Cancelar
-                    </button>
-                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: colores.primario, color: 'white' }}>
-                      <FiPlus style={{ marginRight: '5px' }} /> Crear
-                    </button>
+                    {tipoRegistro ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => { setTipoRegistro(null); setFormError('') }}
+                          disabled={creandoUsuario}
+                        >
+                          Volver
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn btn-sm"
+                          style={{ backgroundColor: colores.primario, color: 'white' }}
+                          disabled={creandoUsuario}
+                        >
+                          {creandoUsuario ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-1"></span>Registrando…
+                            </>
+                          ) : (
+                            <><FiPlus style={{ marginRight: '5px' }} /> Registrar</>
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateUserModal}>
+                        Cancelar
+                      </button>
+                    )}
                   </div>
                 </form>
               </div>

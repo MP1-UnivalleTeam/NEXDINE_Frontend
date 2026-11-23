@@ -140,7 +140,7 @@ function Mesas() {
           setErrorMessage(err.response.data?.error || 'Error al cargar las mesas.')
         }
       } else {
-        setErrorMessage('Error de conexión con el servidor.')
+        setErrorMessage('Error de conexión. Intenta nuevamente.')
       }
     }
   }
@@ -240,7 +240,7 @@ function Mesas() {
       if (err.response) {
         setErrorMessage(err.response.data?.error || 'Error al crear la mesa')
       } else {
-        setErrorMessage('Error de conexión con el servidor')
+        setErrorMessage('Error de conexión. Intenta nuevamente.')
       }
     }
   }
@@ -258,7 +258,7 @@ function Mesas() {
       if (err.response) {
         setErrorMessage(err.response.data?.error || 'Error al cambiar el estado de la mesa')
       } else {
-        setErrorMessage('Error de conexión con el servidor')
+        setErrorMessage('Error de conexión. Intenta nuevamente.')
       }
       setTimeout(() => setErrorMessage(''), 4000)
     }
