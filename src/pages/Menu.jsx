@@ -11,7 +11,8 @@ import Sugerencias from '../components/Sugerencias.jsx'
 import { filtrarMenu, contarProductos } from '../utils/buscadorProductos.js'
 import {
   guardarContextoMenu,
-  guardarSucursalesDisponibles
+  guardarSucursalesDisponibles,
+  obtenerContextoMenu
 } from '../utils/contextoMenu.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { formatearDinero } from '../utils/dinero.js'
@@ -52,6 +53,7 @@ function Menu() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sesionExpirada, setSesionExpirada] = useState(false)
+  const [cargandoSesion, setCargandoSesion] = useState(true)
 
   // RF019 — Criterios de búsqueda
   const [textoBusqueda, setTextoBusqueda] = useState('')

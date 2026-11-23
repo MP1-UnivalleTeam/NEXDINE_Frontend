@@ -13,6 +13,7 @@
  * Visual: guía "Forest Culinary Precision" (DESIGN.md) — fondo verde bosque
  * #11362E, elemento activo con píldora clara y borde de resalte.
  */
+import { useNavigate } from 'react-router-dom'
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
 import { colores } from '../styles/tokens.js'
 
@@ -36,6 +37,8 @@ const LINK_ACTIVO = {
 }
 
 function Sidebar({ currentUser, rutaActual, onLogout }) {
+  const navigate = useNavigate()
+
   if (!currentUser) return null
 
   const esAdmin = currentUser.rol === 'ADMINISTRADOR' || currentUser.rol === 'SUPERADMIN'
@@ -94,13 +97,21 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
                   <i className="fa-solid fa-utensils"></i> Ver Menú
                 </a>
               ) : (
-                <span
+                <button
+                  type="button"
                   className="nav-link"
-                  style={{ ...LINK_BASE, opacity: 0.5, cursor: 'not-allowed' }}
-                  title="Escanea el código QR de tu mesa para abrir el menú"
+                  onClick={() => navigate('/menu')}
+                  style={{
+                    ...LINK_BASE,
+                    width: '100%',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
                 >
                   <i className="fa-solid fa-utensils"></i> Ver Menú
-                </span>
+                </button>
               )}
             </li>
             <li className="nav-item">
