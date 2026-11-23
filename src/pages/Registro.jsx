@@ -62,7 +62,7 @@ function Registro() {
       setRegistrado(true)
     } catch (err) {
       if ([404, 405, 501].includes(err?.response?.status)) {
-        setError('El registro en línea todavía no está habilitado. Comunícate con el restaurante para crear tu cuenta.')
+        setError('El registro no está disponible en este momento. Comunícate con el restaurante para crear tu cuenta.')
       } else {
         setError(obtenerMensajeError(err, 'No fue posible completar el registro. Intenta nuevamente.'))
       }
@@ -84,7 +84,7 @@ function Registro() {
           <FiCheckCircle size={38} style={{ color: colores.exito }} />
           <h4 className="mt-3" style={{ fontWeight: 700, color: colores.texto }}>Cuenta creada</h4>
           <p style={{ color: colores.textoSuave, fontSize: '14px' }}>
-            Ya puedes iniciar sesión con el usuario y la contraseña que registraste.
+            Tu cuenta está lista. Ya puedes hacer tus pedidos en NEXDINE.
           </p>
           <button
             type="button"
@@ -92,7 +92,7 @@ function Registro() {
             style={{ ...btnPrimario }}
             onClick={() => navigate('/login')}
           >
-            Ir a iniciar sesión
+            Continuar
           </button>
         </div>
       </div>
@@ -259,7 +259,7 @@ function Registro() {
         </button>
 
         <small style={{ display: 'block', color: colores.textoSuave, fontSize: '11.5px', marginTop: '14px', textAlign: 'center' }}>
-          Si el registro en línea aún no está disponible, comunícate con el restaurante.
+          El registro crea una cuenta de cliente para hacer pedidos.
         </small>
       </div>
     </div>

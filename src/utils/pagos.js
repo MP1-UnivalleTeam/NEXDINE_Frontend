@@ -13,6 +13,12 @@ export const ESTADOS_PAGO = {
     fondo: colores.advertenciaFondo,
     texto: colores.advertenciaTexto
   },
+  PARCIAL: {
+    valor: 'PARCIAL',
+    etiqueta: 'Pago parcial',
+    fondo: colores.advertenciaFondo,
+    texto: colores.advertenciaTexto
+  },
   APROBADO: {
     valor: 'APROBADO',
     etiqueta: 'Pagado',
@@ -37,8 +43,14 @@ const ALIAS_ESTADO = {
   PAGADO: 'APROBADO',
   APROBADO: 'APROBADO',
   PENDIENTE: 'PENDIENTE',
+  PARCIAL: 'PARCIAL',
   RECHAZADO: 'RECHAZADO',
   CANCELADO: 'CANCELADO'
+}
+
+const ETIQUETAS_METODO_ANTERIOR = {
+  ONLINE: 'Pago en línea',
+  CONTRA_ENTREGA: 'Método anterior'
 }
 
 export function normalizarEstadoPago(estado) {
@@ -49,6 +61,10 @@ export function normalizarEstadoPago(estado) {
 
 export function estaPagado(estado) {
   return normalizarEstadoPago(estado) === 'APROBADO'
+}
+
+export function pagoCancelable(estado) {
+  return ['PENDIENTE', 'PARCIAL'].includes(normalizarEstadoPago(estado))
 }
 
 export function infoEstadoPago(estado) {
@@ -62,15 +78,25 @@ export function infoEstadoPago(estado) {
 }
 
 export const METODOS_PAGO = {
-  PAGO_EN_LINEA: {
-    valor: 'PAGO_EN_LINEA',
-    etiqueta: 'Pago en línea',
-    descripcion: 'Pago anticipado con la pasarela del restaurante.'
-  },
   EFECTIVO: {
     valor: 'EFECTIVO',
     etiqueta: 'Efectivo',
-    descripcion: 'Pagas en efectivo al recoger tu pedido.'
+    descripcion: 'Pago en efectivo al recibir o recoger el pedido.'
+  },
+  TARJETA: {
+    valor: 'TARJETA',
+    etiqueta: 'Tarjeta',
+    descripcion: 'Pago con tarjeta débito o crédito.'
+  },
+  TRANSFERENCIA: {
+    valor: 'TRANSFERENCIA',
+    etiqueta: 'Transferencia',
+    descripcion: 'Transferencia bancaria; el pago se confirma al verificarla.'
+  },
+  PAGO_EN_LINEA: {
+    valor: 'PAGO_EN_LINEA',
+    etiqueta: 'Pago en línea',
+    descripcion: 'Pago en línea; para domicilio requiere pago anticipado.'
   },
   CONTRA_ENTREGA: {
     valor: 'CONTRA_ENTREGA',
@@ -80,8 +106,8 @@ export const METODOS_PAGO = {
 }
 
 const METODOS_POR_SERVICIO = {
-  DOMICILIO: ['PAGO_EN_LINEA', 'CONTRA_ENTREGA'],
-  PARA_LLEVAR: ['PAGO_EN_LINEA', 'EFECTIVO']
+  DOMICILIO: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'PAGO_EN_LINEA', 'CONTRA_ENTREGA'],
+  PARA_LLEVAR: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'PAGO_EN_LINEA']
 }
 
 export function metodosPagoParaServicio(tipoServicio) {
@@ -90,11 +116,14 @@ export function metodosPagoParaServicio(tipoServicio) {
 }
 
 export function etiquetaMetodoPago(metodo) {
-  return METODOS_PAGO[String(metodo || '').toUpperCase()]?.etiqueta || 'Sin seleccionar'
+  const clave = String(metodo || '').trim().toUpperCase()
+  return METODOS_PAGO[clave]?.etiqueta
+    || ETIQUETAS_METODO_ANTERIOR[clave]
+    || 'Sin seleccionar'
 }
 
 export function esPagoEnLinea(metodo) {
-  return String(metodo || '').toUpperCase() === 'PAGO_EN_LINEA'
+  return String(metodo || '').trim().toUpperCase() === 'PAGO_EN_LINEA'
 }
 
 export function esBackendPagoNoDisponible(err) {
@@ -112,7 +141,9 @@ export function pagoDesdePedido(pedido) {
     pagoMetodo: pedido.pagoMetodo || '',
     pagoEstado: pedido.pagoEstado || '',
     pagoImporteRecibido: pedido.pagoImporteRecibido || 0,
-    pagoCambio: pedido.pagoCambio || 0
+    pagoCambio: pedido.pagoCambio || 0,
+    pagoReferencia: pedido.pagoReferencia || '',
+    pagoAnticipo: Boolean(pedido.pagoAnticipo)
   }
 }
 
@@ -127,6 +158,8 @@ export function resumirPagosMesa(pedidos) {
     estado = 'APROBADO'
   } else if (lista.some(pedido => normalizarEstadoPago(pedido.pagoEstado) === 'PENDIENTE')) {
     estado = 'PENDIENTE'
+  } else if (lista.some(pedido => normalizarEstadoPago(pedido.pagoEstado) === 'PARCIAL')) {
+    estado = 'PARCIAL'
   } else if (lista.some(pedido => ['RECHAZADO', 'CANCELADO'].includes(normalizarEstadoPago(pedido.pagoEstado)))) {
     estado = 'RECHAZADO'
   } else if (lista.some(pedido => pedido.pagoEstado)) {

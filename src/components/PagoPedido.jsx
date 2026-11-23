@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   FiAlertCircle, FiCheckCircle, FiCreditCard, FiDollarSign, FiLock, FiRefreshCw,
-  FiTruck, FiXCircle
+  FiRepeat, FiTruck, FiXCircle
 } from 'react-icons/fi'
 import {
   confirmarPago,
@@ -13,11 +13,13 @@ import {
 import { obtenerMensajeError } from '../services/mensajes.js'
 import { formatearDinero } from '../utils/dinero.js'
 import EstadoPagoBadge from './EstadoPagoBadge.jsx'
+import FormularioTarjeta from './FormularioTarjeta.jsx'
 import {
   esBackendPagoNoDisponible,
   estaPagado,
   etiquetaMetodoPago,
   normalizarEstadoPago,
+  pagoCancelable,
   pagoDesdePedido
 } from '../utils/pagos.js'
 import {
@@ -30,12 +32,13 @@ const METODOS = [
   { valor: 'EFECTIVO', etiqueta: 'Efectivo', icono: FiDollarSign },
   { valor: 'TARJETA', etiqueta: 'Tarjeta', icono: FiCreditCard },
   { valor: 'CONTRA_ENTREGA', etiqueta: 'Contra entrega', icono: FiTruck, soloDomicilio: true },
-  { valor: 'PAGO_EN_LINEA', etiqueta: 'Pago en línea', icono: FiLock, soloEnLinea: true }
+  { valor: 'PAGO_EN_LINEA', etiqueta: 'Pago en línea', icono: FiLock, soloEnLinea: true },
+  { valor: 'TRANSFERENCIA', etiqueta: 'Transferencia', icono: FiRepeat }
 ]
 
 function mensajeDeError(err) {
   if (esBackendPagoNoDisponible(err)) {
-    return 'La gestión de pagos todavía no está disponible en el servidor.'
+    return 'La gestión de pagos no está disponible en este momento.'
   }
   const estado = err?.response?.status
   if (estado === 401) return 'Tu sesión expiró. Inicia sesión nuevamente.'
@@ -46,10 +49,9 @@ function mensajeDeError(err) {
 /**
  * Panel de pago reutilizable.
  *
- * El estado mostrado siempre proviene del backend (resumen del pedido o
- * endpoint de pago). El frontend no declara pagos aprobados por su cuenta.
- * Si el endpoint de pagos aún no existe, se muestra el estado del pedido y
- * se deshabilitan las acciones en lugar de simular una transacción.
+ * El estado mostrado siempre proviene del pedido o de la consulta real del
+ * pago. El frontend no declara pagos aprobados por su cuenta ni simula
+ * operaciones que el servicio no confirme.
  */
 function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const pedidoId = pedido?.id
@@ -59,7 +61,9 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const [disponible, setDisponible] = useState(null)
   const [error, setError] = useState('')
   const [aviso, setAviso] = useState('')
+  const [nota, setNota] = useState('')
   const [procesando, setProcesando] = useState('')
+  const [confirmandoCancelacion, setConfirmandoCancelacion] = useState(false)
   const [monto, setMonto] = useState(
     pagoInicial?.pagoImporteRecibido > 0 ? String(pagoInicial.pagoImporteRecibido) : ''
   )
@@ -98,10 +102,23 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const tipoServicio = pagoActual?.tipoServicio || pedido?.tipoServicio
   const esDomicilio = tipoServicio === 'DOMICILIO'
   const metodoActual = pagoActual?.pagoMetodo || ''
-  const admiteEfectivo = metodoActual === 'EFECTIVO' || metodoActual === 'CONTRA_ENTREGA'
+  const admiteEfectivo = metodoActual === 'EFECTIVO'
+  const esTarjeta = metodoActual === 'TARJETA'
+  const esTransferencia = metodoActual === 'TRANSFERENCIA'
   const puedeConfirmar = ROLES_CONFIRMACION.includes(rol)
   const estadoPago = normalizarEstadoPago(pagoActual?.pagoEstado)
   const accionesDisponibles = disponible === true
+  const cancelacionDisponible = accionesDisponibles
+    && !pagado
+    && !cancelado
+    && pagoCancelable(pagoActual?.pagoEstado)
+
+  const limpiarMensajes = () => {
+    setError('')
+    setAviso('')
+    setNota('')
+    setConfirmandoCancelacion(false)
+  }
 
   const manejarErrorOperacion = (err) => {
     if (esBackendPagoNoDisponible(err)) {
@@ -113,14 +130,17 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const cambiarMetodo = async (metodo) => {
     if (procesando || pagado || cancelado || !accionesDisponibles) return
     setProcesando(metodo)
-    setError('')
-    setAviso('')
+    limpiarMensajes()
     try {
       const datos = await seleccionarMetodoPago(pedidoId, metodo)
       setPago(datos)
       setAviso(`Método de pago actualizado a ${etiquetaMetodoPago(datos.pagoMetodo)}.`)
+      setModoPagoEnLinea(metodo === 'PAGO_EN_LINEA')
       if (datos.pagoMetodo !== 'EFECTIVO' && datos.pagoMetodo !== 'CONTRA_ENTREGA') {
         setMonto('')
+      }
+      if (metodo === 'PAGO_EN_LINEA') {
+        setReferencia('')
       }
     } catch (err) {
       manejarErrorOperacion(err)
@@ -137,39 +157,15 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
       return
     }
     setProcesando('monto')
-    setError('')
-    setAviso('')
+    limpiarMensajes()
     try {
       const datos = await registrarMontoEfectivo(pedidoId, valor)
       setPago(datos)
       setAviso(
         datos.pagoCambio > 0
-          ? `Monto registrado. Cambio calculado por el servidor: ${formatearDinero(datos.pagoCambio)}.`
+          ? `Monto registrado. Cambio: ${formatearDinero(datos.pagoCambio)}.`
           : 'Monto registrado. No hay cambio pendiente.'
       )
-    } catch (err) {
-      manejarErrorOperacion(err)
-    } finally {
-      setProcesando('')
-    }
-  }
-
-  const cambiarMetodo = async (metodo) => {
-    if (procesando || pagado || cancelado || !accionesDisponibles) return
-    setProcesando(metodo)
-    setError('')
-    setAviso('')
-    try {
-      const datos = await seleccionarMetodoPago(pedidoId, metodo)
-      setPago(datos)
-      setAviso(`Método de pago actualizado a ${etiquetaMetodoPago(datos.pagoMetodo)}.`)
-      setModoPagoEnLinea(metodo === 'PAGO_EN_LINEA')
-      if (datos.pagoMetodo !== 'EFECTIVO' && datos.pagoMetodo !== 'CONTRA_ENTREGA') {
-        setMonto('')
-      }
-      if (metodo === 'PAGO_EN_LINEA') {
-        setReferencia('')
-      }
     } catch (err) {
       manejarErrorOperacion(err)
     } finally {
@@ -216,8 +212,7 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const confirmar = async () => {
     if (procesando || pagado || cancelado || !accionesDisponibles) return
     setProcesando('confirmar')
-    setError('')
-    setAviso('')
+    limpiarMensajes()
     try {
       const resumen = await confirmarPago(pedidoId)
       setPago(resumen)
@@ -228,6 +223,19 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
     } finally {
       setProcesando('')
     }
+  }
+
+  const solicitarCobroTarjeta = () => {
+    setError('')
+    setAviso('')
+    setNota('El cobro con tarjeta todavía no está disponible. No se realizó ningún cargo.')
+  }
+
+  const confirmarCancelacion = () => {
+    setConfirmandoCancelacion(false)
+    setError('')
+    setAviso('')
+    setNota('La cancelación de pagos no está disponible en este momento. El pago no fue modificado.')
   }
 
   if (!pedidoId) return null
@@ -299,7 +307,7 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
             borderRadius: radios.full, backgroundColor: colores.superficie,
             color: colores.textoSuave, fontSize: '11px', fontWeight: 600
           }}>
-            Recibido: {formatearDinero(pagoActual.pagoImporteRecibido)}
+            {pagoActual.pagoAnticipo ? 'Abono' : 'Recibido'}: {formatearDinero(pagoActual.pagoImporteRecibido)}
           </span>
         )}
         {pagoActual.pagoCambio > 0 && (
@@ -319,7 +327,17 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
           borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
         }}>
           <FiAlertCircle style={{ marginRight: '5px' }} />
-          Procesando pago. El estado se actualizará cuando el servidor lo confirme.
+          Pago pendiente de confirmación.
+        </div>
+      )}
+
+      {estadoPago === 'PARCIAL' && (
+        <div role="status" style={{
+          marginTop: '10px', backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
+          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+        }}>
+          <FiAlertCircle style={{ marginRight: '5px' }} />
+          El pedido tiene un abono parcial. Falta completar el pago.
         </div>
       )}
 
@@ -367,6 +385,15 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
         </div>
       )}
 
+      {nota && (
+        <div role="status" style={{
+          marginTop: '10px', backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
+          borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
+        }}>
+          <FiAlertCircle style={{ marginRight: '5px' }} />{nota}
+        </div>
+      )}
+
       {error && (
         <div role="alert" style={{
           marginTop: '10px', backgroundColor: colores.errorFondo, color: colores.errorTexto,
@@ -382,7 +409,7 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
           borderRadius: radios.sm, padding: '9px 11px', fontSize: '12.5px'
         }}>
           <FiLock style={{ marginRight: '5px' }} />
-          La gestión de pagos aún no está disponible en el servidor. El estado mostrado proviene del pedido.
+          La gestión de pagos no está disponible en este momento. Se muestra el estado registrado del pedido.
         </div>
       )}
 
@@ -400,23 +427,19 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
               Método de pago
             </small>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {METODOS.map(({ valor, etiqueta, icono: Icono, soloDomicilio }) => {
-                const noDisponible = soloDomicilio && !esDomicilio
+              {METODOS.map(({ valor, etiqueta, icono: Icono }) => {
                 const activo = metodoActual === valor
                 return (
                   <button
                     key={valor}
                     type="button"
-                    disabled={Boolean(procesando) || noDisponible}
-                    title={noDisponible ? 'El pago contra entrega solo aplica a pedidos a domicilio.' : etiqueta}
+                    disabled={Boolean(procesando)}
                     onClick={() => cambiarMetodo(valor)}
                     style={{
                       ...(activo ? btnPrimario : btnGhost),
                       minHeight: '38px',
                       fontSize: '12.5px',
-                      padding: '0 12px',
-                      opacity: noDisponible ? 0.45 : 1,
-                      cursor: noDisponible ? 'not-allowed' : 'pointer'
+                      padding: '0 12px'
                     }}
                   >
                     <Icono style={{ marginRight: '5px' }} />
@@ -426,11 +449,6 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
                 )
               })}
             </div>
-            {!esDomicilio && (
-              <small style={{ display: 'block', color: colores.textoSuave, marginTop: '6px' }}>
-                El pago contra entrega solo está disponible para pedidos a domicilio.
-              </small>
-            )}
           </div>
 
           {admiteEfectivo && (
@@ -450,7 +468,7 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
                   value={monto}
                   disabled={Boolean(procesando)}
                   onChange={(event) => setMonto(event.target.value)}
-                  placeholder={String(pagoActual.total)}
+                  placeholder={formatearDinero(pagoActual.total)}
                   style={{ ...input, flex: '1 1 140px', minWidth: 0, padding: '0 10px' }}
                 />
                 <button
@@ -464,23 +482,46 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
                 </button>
               </div>
               <small style={{ display: 'block', color: colores.textoSuave, marginTop: '5px' }}>
-                El backend valida que el monto cubra el total y calcula el cambio.
+                El monto debe cubrir el total del pedido.
               </small>
             </div>
           )}
 
+          {esTransferencia && (
+            <small style={{
+              display: 'block', color: colores.textoSuave, marginTop: '10px',
+              backgroundColor: colores.superficie, borderRadius: radios.sm, padding: '9px 11px'
+            }}>
+              Verifica la transferencia antes de confirmar el pago.
+            </small>
+          )}
+
+          {esTarjeta && esDomicilio && (
+            <FormularioTarjeta onSolicitarCobro={solicitarCobroTarjeta} />
+          )}
+
           {puedeConfirmar ? (
-            <button
-              type="button"
-              className="btn w-100"
-              disabled={Boolean(procesando) || !metodoActual}
-              title={!metodoActual ? 'Selecciona un método de pago antes de confirmar.' : 'Confirmar pago'}
-              onClick={confirmar}
-              style={{ ...btnPrimario, minHeight: '44px', marginTop: '12px' }}
-            >
-              <FiCheckCircle style={{ marginRight: '6px' }} />
-              {procesando === 'confirmar' ? 'Confirmando…' : 'Confirmar pago'}
-            </button>
+            esTarjeta ? (
+              <small style={{
+                display: 'block', color: colores.textoSuave, marginTop: '12px',
+                backgroundColor: colores.superficie, borderRadius: radios.sm, padding: '9px 11px'
+              }}>
+                <FiLock style={{ marginRight: '5px' }} />
+                El pago con tarjeta se confirmará cuando el restaurante habilite el cobro seguro.
+              </small>
+            ) : (
+              <button
+                type="button"
+                className="btn w-100"
+                disabled={Boolean(procesando) || !metodoActual}
+                title={!metodoActual ? 'Selecciona un método de pago antes de confirmar.' : 'Confirmar pago'}
+                onClick={confirmar}
+                style={{ ...btnPrimario, minHeight: '44px', marginTop: '12px' }}
+              >
+                <FiCheckCircle style={{ marginRight: '6px' }} />
+                {procesando === 'confirmar' ? 'Confirmando…' : 'Confirmar pago'}
+              </button>
+            )
           ) : (
             <small style={{
               display: 'block', color: colores.textoSuave, marginTop: '12px',
@@ -533,6 +574,51 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
             <small style={{ display: 'block', color: colores.textoSuave, marginTop: '8px' }}>
               Selecciona un método para habilitar la confirmación.
             </small>
+          )}
+
+          {cancelacionDisponible && (
+            <div style={{ marginTop: '14px', borderTop: `1px solid ${colores.borde}`, paddingTop: '12px' }}>
+              {!confirmandoCancelacion ? (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={Boolean(procesando)}
+                  onClick={() => {
+                    limpiarMensajes()
+                    setConfirmandoCancelacion(true)
+                  }}
+                  style={{ ...btnGhost, minHeight: '42px', fontSize: '13px', color: colores.errorTexto }}
+                >
+                  <FiXCircle style={{ marginRight: '6px' }} /> Cancelar pago
+                </button>
+              ) : (
+                <div role="alertdialog" aria-label="Confirmar cancelación del pago" style={{
+                  backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
+                  borderRadius: radios.sm, padding: '10px 12px', fontSize: '12.5px'
+                }}>
+                  <strong style={{ display: 'block', marginBottom: '4px' }}>¿Cancelar el pago de este pedido?</strong>
+                  <span>Esta acción no se puede deshacer.</span>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={confirmarCancelacion}
+                      style={{ ...btnGhost, minHeight: '36px', fontSize: '12.5px', color: colores.errorTexto }}
+                    >
+                      Sí, cancelar pago
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setConfirmandoCancelacion(false)}
+                      style={{ ...btnGhost, minHeight: '36px', fontSize: '12.5px' }}
+                    >
+                      No, volver
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </>
       )}

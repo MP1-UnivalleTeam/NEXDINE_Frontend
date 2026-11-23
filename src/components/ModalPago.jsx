@@ -1,21 +1,13 @@
-import { useState } from 'react'
 import { FiX } from 'react-icons/fi'
 import PagoPedido from './PagoPedido.jsx'
 import { colores, sombras, radios, tarjeta, btnGhost } from '../styles/tokens.js'
 
 /**
  * Modal de pago para el panel operativo. Reutiliza PagoPedido, que consulta
- * y modifica el pago real en el backend.
+ * y modifica el pago real.
  */
 function ModalPago({ pedido, rol, onCerrar, onPagado }) {
-  const [pagado, setPagado] = useState(false)
-
   if (!pedido) return null
-
-  const manejarPagado = (resumen) => {
-    setPagado(true)
-    onPagado?.(resumen)
-  }
 
   return (
     <>
@@ -46,7 +38,7 @@ function ModalPago({ pedido, rol, onCerrar, onPagado }) {
             </div>
 
             <div style={{ padding: '16px 22px', maxHeight: '70vh', overflowY: 'auto' }}>
-              <PagoPedido pedido={pedido} rol={rol} onPagado={manejarPagado} compacto />
+              <PagoPedido pedido={pedido} rol={rol} onPagado={onPagado} compacto />
             </div>
 
             <div style={{
@@ -54,7 +46,7 @@ function ModalPago({ pedido, rol, onCerrar, onPagado }) {
               padding: '12px 22px', display: 'flex', justifyContent: 'flex-end', gap: '10px'
             }}>
               <button type="button" className="btn" onClick={onCerrar} style={{ ...btnGhost, minHeight: '42px', borderRadius: radios.sm }}>
-                {pagado ? 'Cerrar' : 'Cancelar'}
+                Cerrar
               </button>
             </div>
           </div>

@@ -164,7 +164,7 @@ function Impuestos() {
       setSuccessMessage(
         datos?.activo
           ? 'Impuesto activado. Se aplicará a los pedidos nuevos.'
-          : 'Impuesto desactivado. El backend aplicará 0 % a los pedidos nuevos.'
+          : 'Impuesto desactivado. Se aplicará 0 % a los pedidos nuevos.'
       )
     } catch (err) {
       if (err.response?.status === 401) {
@@ -259,7 +259,7 @@ function Impuestos() {
             <div style={{ fontWeight: 600, color: colores.texto, marginTop: '8px' }}>
               No hay configuración disponible
             </div>
-            <small>Actualiza para volver a consultar la configuración del backend.</small>
+            <small>Actualiza para volver a consultar la configuración.</small>
           </div>
         )}
 
@@ -286,8 +286,8 @@ function Impuestos() {
                   </div>
                   <small style={{ color: colores.textoSuave, display: 'block', marginTop: '8px' }}>
                     {config.activo
-                      ? 'Porcentaje aplicado por el backend a los pedidos nuevos.'
-                      : 'Impuesto desactivado: el backend aplica 0 %.'}
+                      ? 'Porcentaje aplicado a los pedidos nuevos.'
+                      : 'Impuesto desactivado: se aplica 0 %.'}
                   </small>
                 </div>
 
@@ -316,7 +316,7 @@ function Impuestos() {
                   Editar configuración
                 </h5>
                 <small style={{ color: colores.textoSuave, display: 'block', marginBottom: '18px' }}>
-                  Solo el SUPERADMIN puede modificar estos valores. El backend valida el rango 0–100 y dos decimales.
+                  Solo el SUPERADMIN puede modificar estos valores. El rango permitido es 0-100 con dos decimales.
                 </small>
 
                 <div className="mb-3">
