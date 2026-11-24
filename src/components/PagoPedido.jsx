@@ -635,7 +635,7 @@ function PagoPedido({ pedido, rol = null, onPagado, onPagoActualizado, compacto 
                 </small>
               )}
 
-              {metodoActual === 'PAGO_EN_LINEA' && (
+              {metodoActual === 'PAGO_EN_LINEA' && puedeConfirmar && (
                 <div style={{ marginTop: '12px' }}>
                   <label htmlFor={`referencia-pago-${pedidoId}`} style={{
                     display: 'block',
