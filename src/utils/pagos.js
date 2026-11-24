@@ -82,7 +82,7 @@ export function estaPagado(estado) {
 }
 
 export function pagoCancelable(estado) {
-  return ['PENDIENTE', 'PARCIAL'].includes(normalizarEstadoPago(estado))
+  return ['PENDIENTE', 'PARCIAL', 'APROBADO'].includes(normalizarEstadoPago(estado))
 }
 
 export function infoEstadoPago(estado) {
@@ -100,9 +100,15 @@ export function metodosPagoParaServicio(tipoServicio) {
   return claves.map(clave => METODOS_PAGO[clave])
 }
 
+const ETIQUETAS_LEGADO = {
+  ONLINE: 'Pago en línea',
+  PAGO_EN_LINEA: 'Pago en línea',
+  CONTRA_ENTREGA: 'Método anterior'
+}
+
 export function etiquetaMetodoPago(metodo) {
   const clave = String(metodo || '').trim().toUpperCase()
-  return METODOS_PAGO[clave]?.etiqueta || 'Sin seleccionar'
+  return METODOS_PAGO[clave]?.etiqueta || ETIQUETAS_LEGADO[clave] || 'Sin seleccionar'
 }
 
 export function esPagoEnLinea(metodo) {

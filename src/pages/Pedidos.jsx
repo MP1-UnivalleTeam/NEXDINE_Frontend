@@ -198,6 +198,12 @@ function Pedidos() {
     setTimeout(() => setSuccessMessage(''), 4500)
   }
 
+  const pagoActualizado = async () => {
+    setSuccessMessage('')
+    await cargarNotificaciones()
+    await recargar()
+  }
+
   const horaActualizacion = ultimaActualizacion
     ? ultimaActualizacion.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—'
@@ -503,6 +509,7 @@ function Pedidos() {
           rol={currentUser.rol}
           onCerrar={() => setPedidoPago(null)}
           onPagado={pagoConfirmado}
+          onPagoActualizado={pagoActualizado}
         />
       )}
     </div>

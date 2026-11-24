@@ -6,7 +6,7 @@ import { colores, sombras, radios, tarjeta, btnGhost } from '../styles/tokens.js
  * Modal de pago para el panel operativo. Reutiliza PagoPedido, que consulta
  * y modifica el pago real.
  */
-function ModalPago({ pedido, rol, onCerrar, onPagado }) {
+function ModalPago({ pedido, rol, onCerrar, onPagado, onPagoActualizado }) {
   if (!pedido) return null
 
   return (
@@ -38,7 +38,13 @@ function ModalPago({ pedido, rol, onCerrar, onPagado }) {
             </div>
 
             <div style={{ padding: '16px 22px', maxHeight: '70vh', overflowY: 'auto' }}>
-              <PagoPedido pedido={pedido} rol={rol} onPagado={onPagado} compacto />
+              <PagoPedido
+                pedido={pedido}
+                rol={rol}
+                onPagado={onPagado}
+                onPagoActualizado={onPagoActualizado}
+                compacto
+              />
             </div>
 
             <div style={{

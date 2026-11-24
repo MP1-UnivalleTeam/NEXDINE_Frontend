@@ -260,6 +260,9 @@ function ResumenPedido() {
                 onPagado={(actualizado) => {
                   if (actualizado?.id) setResumen(actualizado)
                 }}
+                onPagoActualizado={(actualizado) => {
+                  if (actualizado?.id) setResumen(actualizado)
+                }}
               />
             )}
           </div>

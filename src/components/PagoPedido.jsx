@@ -4,6 +4,7 @@ import {
   FiRepeat, FiXCircle
 } from 'react-icons/fi'
 import {
+  cancelarPago,
   confirmarPago,
   obtenerPago,
   registrarMontoEfectivo,
@@ -19,6 +20,7 @@ import {
   estaPagado,
   etiquetaMetodoPago,
   normalizarEstadoPago,
+  pagoCancelable,
   pagoDesdePedido
 } from '../utils/pagos.js'
 import {
@@ -43,7 +45,7 @@ function mensajeDeError(err) {
   return obtenerMensajeError(err, 'No fue posible gestionar el pago.')
 }
 
-function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
+function PagoPedido({ pedido, rol = null, onPagado, onPagoActualizado, compacto = false }) {
   const pedidoId = pedido?.id
   const pagoInicial = pagoDesdePedido(pedido)
   const [pago, setPago] = useState(pagoInicial)
@@ -57,7 +59,8 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
     pagoInicial?.pagoImporteRecibido > 0 ? String(pagoInicial.pagoImporteRecibido) : ''
   )
   const [referencia, setReferencia] = useState('')
-  const requiereAnticipo = Boolean(pagoInicial?.pagoAnticipo)
+  const [confirmandoCancelacion, setConfirmandoCancelacion] = useState(false)
+  const requiereAnticipo = Boolean(pago?.pagoAnticipo ?? pagoInicial?.pagoAnticipo)
 
   const cargar = useCallback(async () => {
     if (!pedidoId) return
@@ -100,11 +103,18 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
   const puedeConfirmar = ROLES_CONFIRMACION.includes(rol)
   const estadoPago = normalizarEstadoPago(pagoActual?.pagoEstado)
   const accionesDisponibles = disponible === true
+  const cancelacionDisponible = accionesDisponibles
+    && puedeConfirmar
+    && !cancelado
+    && Boolean(metodoActual)
+    && metodoActual !== 'TARJETA'
+    && pagoCancelable(pagoActual?.pagoEstado)
 
   const limpiarMensajes = () => {
     setError('')
     setAviso('')
     setNota('')
+    setConfirmandoCancelacion(false)
   }
 
   const manejarErrorOperacion = (err) => {
@@ -210,6 +220,28 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
       setAviso('Pago confirmado correctamente.')
       onPagado?.(resumen)
     } catch (err) {
+      manejarErrorOperacion(err)
+    } finally {
+      setProcesando('')
+    }
+  }
+
+  const cancelarPagoActual = async () => {
+    if (procesando || !cancelacionDisponible) return
+    setProcesando('cancelar')
+    setError('')
+    setAviso('')
+    setNota('')
+    try {
+      const resumen = await cancelarPago(pedidoId)
+      setPago(resumen)
+      setMonto('')
+      setReferencia('')
+      setConfirmandoCancelacion(false)
+      setAviso('El pago quedó cancelado. El pedido sigue activo y puedes registrar un nuevo pago.')
+      onPagoActualizado?.(resumen)
+    } catch (err) {
+      setConfirmandoCancelacion(false)
       manejarErrorOperacion(err)
     } finally {
       setProcesando('')
@@ -663,6 +695,64 @@ function PagoPedido({ pedido, rol = null, onPagado, compacto = false }) {
             }}>
               <FiCheckCircle style={{ marginRight: '6px' }} />
               Pago aprobado. El pedido quedó registrado como pagado.
+            </div>
+          )}
+
+          {cancelacionDisponible && (
+            <div style={{
+              marginTop: '14px',
+              borderTop: `1px solid ${colores.borde}`,
+              paddingTop: '12px'
+            }}>
+              {!confirmandoCancelacion ? (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={Boolean(procesando)}
+                  onClick={() => {
+                    setError('')
+                    setAviso('')
+                    setNota('')
+                    setConfirmandoCancelacion(true)
+                  }}
+                  style={{ ...btnGhost, minHeight: '42px', fontSize: '13px', color: colores.errorTexto }}
+                >
+                  <FiXCircle style={{ marginRight: '6px' }} /> Cancelar pago
+                </button>
+              ) : (
+                <div role="alertdialog" aria-label="Confirmar cancelación del pago" style={{
+                  backgroundColor: colores.advertenciaFondo,
+                  color: colores.advertenciaTexto,
+                  borderRadius: radios.sm,
+                  padding: '10px 12px',
+                  fontSize: '12.5px'
+                }}>
+                  <strong style={{ display: 'block', marginBottom: '4px' }}>
+                    ¿Cancelar el pago de este pedido?
+                  </strong>
+                  <span>El pedido seguirá activo. Podrás registrar un nuevo pago.</span>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={Boolean(procesando)}
+                      onClick={cancelarPagoActual}
+                      style={{ ...btnGhost, minHeight: '36px', fontSize: '12.5px', color: colores.errorTexto }}
+                    >
+                      {procesando === 'cancelar' ? 'Cancelando…' : 'Sí, cancelar pago'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={Boolean(procesando)}
+                      onClick={() => setConfirmandoCancelacion(false)}
+                      style={{ ...btnGhost, minHeight: '36px', fontSize: '12.5px' }}
+                    >
+                      No, volver
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

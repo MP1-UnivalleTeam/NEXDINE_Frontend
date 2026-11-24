@@ -11,8 +11,7 @@ import Sugerencias from '../components/Sugerencias.jsx'
 import { filtrarMenu, contarProductos } from '../utils/buscadorProductos.js'
 import {
   guardarContextoMenu,
-  guardarSucursalesDisponibles,
-  obtenerContextoMenu
+  guardarSucursalesDisponibles
 } from '../utils/contextoMenu.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { formatearDinero } from '../utils/dinero.js'
@@ -70,6 +69,9 @@ function Menu() {
   // RF031 — Sucursales del restaurante (solo menú público con varias sucursales)
   const [sucursalesDisponibles, setSucursalesDisponibles] = useState([])
   const [errorSucursalMenu, setErrorSucursalMenu] = useState('')
+
+  // Menús públicos disponibles para el cliente autenticado
+  const [menusCliente, setMenusCliente] = useState([])
 
   // Favoritos del cliente autenticado
   const [usuario, setUsuario] = useState(null)
@@ -185,24 +187,48 @@ function Menu() {
   }
 
   /**
-   * Cliente autenticado desde el panel: reutiliza el enlace público que el
-   * sistema ya guardó para el menú y aplica la sucursal del cliente si existe.
+   * Cliente autenticado desde el panel: consulta los menús públicos que el
+   * backend expone para el cliente y reutiliza el enlace público del menú.
    */
   const cargarMenuDelCliente = async () => {
-    const contexto = obtenerContextoMenu()
-    const slugMenu = contexto && contexto.startsWith('/menu/')
-      ? decodeURIComponent(contexto.replace(/^\/menu\//, '').split('?')[0])
-      : null
+    setLoading(true)
+    setError('')
+    setMenusCliente([])
+    try {
+      const response = await api.get('/api/clientes/menus')
+      const menus = Array.isArray(response.data?.menus)
+        ? response.data.menus.filter(menu => menu?.slug)
+        : []
 
-    if (!slugMenu) {
-      setError('No fue posible abrir el menú desde tu panel. Solicita el enlace público del menú al restaurante o abre el menú con el QR de tu mesa.')
+      if (menus.length === 1) {
+        const slugUnico = menus[0].slug
+        guardarContextoMenu(`/menu/${slugUnico}`)
+        navigate(`/menu/${encodeURIComponent(slugUnico)}`, { replace: true })
+        return
+      }
+
+      if (menus.length === 0) {
+        setError('No hay menús disponibles en este momento.')
+        return
+      }
+
+      setMenusCliente(menus)
+    } catch (err) {
+      if (err.response && err.response.status === 401) {
+        setError('Tu sesión expiró. Inicia sesión nuevamente.')
+      } else {
+        setError(err.response?.data?.error || 'No fue posible abrir el menú. Intente nuevamente.')
+      }
+    } finally {
       setLoading(false)
-      return
     }
+  }
 
-    const sucursalId = usuario?.sucursalId
-    await cargarMenuPublico(sucursalId ? String(sucursalId) : undefined, slugMenu)
-    guardarContextoMenu(`/menu/${slugMenu}`)
+  const abrirMenuCliente = (menu) => {
+    if (!menu?.slug) return
+    setMenusCliente([])
+    guardarContextoMenu(`/menu/${menu.slug}`)
+    navigate(`/menu/${encodeURIComponent(menu.slug)}`)
   }
 
   /**
@@ -675,7 +701,39 @@ function Menu() {
             />
           )}
 
-          {hayFiltroActivo && totalVisibles === 0 ? (
+          {menusCliente.length > 0 ? (
+            <div style={{ ...tarjeta, padding: '20px', marginBottom: '24px' }}>
+              <h4 style={{ margin: 0, fontWeight: 700, color: colores.texto, fontSize: '18px' }}>
+                Selecciona un menú
+              </h4>
+              <small style={{ color: colores.textoSuave }}>
+                Elige el restaurante que quieres consultar.
+              </small>
+              <div style={{ display: 'grid', gap: '10px', marginTop: '14px' }}>
+                {menusCliente.map(menu => (
+                  <button
+                    key={menu.slug}
+                    type="button"
+                    className="btn text-start"
+                    onClick={() => abrirMenuCliente(menu)}
+                    style={{
+                      border: `1px solid ${colores.borde}`,
+                      borderRadius: radios.md,
+                      padding: '14px',
+                      backgroundColor: colores.tarjeta
+                    }}
+                  >
+                    <strong style={{ display: 'block', color: colores.texto }}>
+                      {menu.restaurante || menu.slug}
+                    </strong>
+                    <small style={{ color: colores.textoSuave }}>
+                      {menu.ruta || `/menu/${menu.slug}`}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : hayFiltroActivo && totalVisibles === 0 ? (
             /* RF019 — Sin coincidencias */
             <div style={{ ...tarjeta, padding: '48px 24px', textAlign: 'center', marginBottom: '24px' }}>
               <div style={{

@@ -24,6 +24,11 @@ export async function confirmarPago(pedidoId) {
   return response.data
 }
 
+export async function cancelarPago(pedidoId) {
+  const response = await api.post(`/api/pedidos/${pedidoId}/pago/cancelar`)
+  return response.data
+}
+
 export async function registrarPagoEnLinea(pedidoId, monto, referencia, anticipo = false) {
   const params = new URLSearchParams()
   params.append('monto', String(monto))
