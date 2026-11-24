@@ -19,7 +19,7 @@ const PREDEFINIDOS = {
   403: 'No tiene permisos para realizar esta acción.',
   404: 'El recurso solicitado no existe.',
   409: 'La operación no se puede realizar porque existe un conflicto.',
-  500: 'Ocurrió un error en el servidor. Intente nuevamente.'
+  500: 'Ocurrió un error inesperado. Intente nuevamente.'
 }
 
 /**
@@ -30,10 +30,15 @@ const PREDEFINIDOS = {
  * @returns {string} Mensaje comprensible para el usuario
  */
 export function obtenerMensajeError(err, fallback = '') {
+  // Tiempo de espera agotado (axios: ECONNABORTED)
+  if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '')) {
+    return 'La operación tardó demasiado. Intente nuevamente.'
+  }
+
   // Sin respuesta del servidor: error de red
   if (!err || !err.response) {
     return err?.message === 'Network Error'
-      ? 'No fue posible conectar con el servidor. Verifique su conexión.'
+      ? 'No fue posible conectar. Verifique su conexión.'
       : (fallback || 'No fue posible completar la operación.')
   }
 

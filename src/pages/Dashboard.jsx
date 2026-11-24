@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FiPlus } from 'react-icons/fi'
 import api from '../services/api.js'
@@ -9,7 +9,6 @@ import { colores, tarjeta } from '../styles/tokens.js'
 function Dashboard() {
   const [currentUser, setCurrentUser] = useState(null)
   const [users, setUsers] = useState([])
-  const [searchedUser, setSearchedUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
@@ -30,8 +29,15 @@ function Dashboard() {
   const [successMessage, setSuccessMessage] = useState('')
   const [formError, setFormError] = useState('')
 
-  // Búsqueda
+  // Búsqueda por ID visual
   const [searchId, setSearchId] = useState('')
+  const [filtroId, setFiltroId] = useState(null)
+  const [busquedaError, setBusquedaError] = useState('')
+
+  // Estado de operaciones para evitar dobles envíos
+  const [creandoUsuario, setCreandoUsuario] = useState(false)
+  const [actualizandoUsuario, setActualizandoUsuario] = useState(false)
+  const [procesandoAccion, setProcesandoAccion] = useState('')
 
   // Modal de edición
   const [showEditModal, setShowEditModal] = useState(false)
@@ -46,6 +52,25 @@ function Dashboard() {
   const [editUserSucursalLoading, setEditUserSucursalLoading] = useState(false)
   const [editUserSucursalError, setEditUserSucursalError] = useState('')
   const editUserSucursalRequest = useRef(0)
+
+  /**
+   * El servicio identifica a los usuarios por UUID. La tabla muestra un ID
+   * numérico secuencial según el orden del listado cargado; las operaciones
+   * siguen usando el UUID real de cada usuario.
+   */
+  const usuariosConId = useMemo(
+    () => users.map((user, indice) => ({ ...user, idVisual: indice + 1 })),
+    [users]
+  )
+
+  const usuariosVisibles = useMemo(
+    () => (filtroId == null
+      ? usuariosConId
+      : usuariosConId.filter(user => user.idVisual === filtroId)),
+    [usuariosConId, filtroId]
+  )
+
+  const busquedaSinResultados = filtroId != null && usuariosVisibles.length === 0
 
   useEffect(() => {
     checkAuth()
@@ -170,6 +195,7 @@ function Dashboard() {
 
   const handleCreateUser = async (e) => {
     e.preventDefault()
+    if (creandoUsuario) return
     setFormError('')
     setSuccessMessage('')
 
@@ -178,21 +204,24 @@ function Dashboard() {
       return
     }
 
-    // La sucursal es opcional: puede quedar "Sin asignar" y asignarse después
-    if (requiereSucursal(newUser.rol) && esSuperadmin() && !newUser.sucursalId) {
-      // Sin sucursal: el usuario se crea pero no tendrá contexto operativo
+    const rol = newUser.rol
+
+    if (rol === 'ADMINISTRADOR' && !esSuperadmin()) {
+      setFormError('Solo el superadministrador puede registrar al dueño de la empresa.')
+      return
     }
 
     const params = new URLSearchParams()
     params.append('nombre', newUser.nombre.trim())
     params.append('contraseña', newUser.contraseña)
-    params.append('rol', newUser.rol)
+    params.append('rol', rol)
     params.append('celular', newUser.celular)
     params.append('direccion', newUser.direccion)
     if (esSuperadmin() && newUser.sucursalId) {
       params.append('sucursalId', newUser.sucursalId)
     }
 
+    setCreandoUsuario(true)
     try {
       await api.post('/users/create', params)
       setSuccessMessage(MENSAJES.USUARIO_CREADO)
@@ -210,17 +239,27 @@ function Dashboard() {
       } else {
         setFormError(obtenerMensajeError(err, 'No fue posible crear el usuario.'))
       }
+    } finally {
+      setCreandoUsuario(false)
     }
   }
 
-  const handleSearch = async (e) => {
+  const handleSearch = (e) => {
     e.preventDefault()
-    try {
-      const response = await api.get(`/users/search?id=${searchId}`)
-      setSearchedUser(response.data)
-    } catch (err) {
-      setSearchedUser(null)
+    const valor = Number(searchId)
+    if (!Number.isInteger(valor) || valor <= 0) {
+      setBusquedaError('Ingresa un ID numérico válido.')
+      setFiltroId(null)
+      return
     }
+    setBusquedaError('')
+    setFiltroId(valor)
+  }
+
+  const limpiarBusqueda = () => {
+    setSearchId('')
+    setFiltroId(null)
+    setBusquedaError('')
   }
 
   const handleEdit = (user) => {
@@ -244,6 +283,7 @@ function Dashboard() {
 
   const handleUpdateUser = async (e) => {
     e.preventDefault()
+    if (actualizandoUsuario) return
     setFormError('')
     if (esSuperadmin() && (editUserSucursalLoading || editUserSucursalError)) {
       setFormError('Consulta la sucursal asignada antes de guardar los cambios.')
@@ -263,6 +303,7 @@ function Dashboard() {
       }
     }
 
+    setActualizandoUsuario(true)
     try {
       await api.post('/users/edit', params)
       setShowEditModal(false)
@@ -271,13 +312,16 @@ function Dashboard() {
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (err) {
       setFormError(obtenerMensajeError(err, 'No fue posible actualizar el usuario.'))
+    } finally {
+      setActualizandoUsuario(false)
     }
   }
 
   const handleDelete = async (user) => {
-    if (!window.confirm(`¿Eliminar a ${user.nombre}?`)) return
+    if (procesandoAccion || !window.confirm(`¿Eliminar a ${user.nombre}?`)) return
     const params = new URLSearchParams()
     params.append('id', user.id)
+    setProcesandoAccion(`delete:${user.id}`)
     try {
       await api.post('/users/delete', params)
       setSuccessMessage(MENSAJES.USUARIO_ELIMINADO)
@@ -286,13 +330,17 @@ function Dashboard() {
     } catch (err) {
       setFormError(obtenerMensajeError(err, 'No fue posible eliminar el usuario.'))
       setTimeout(() => setFormError(''), 4000)
+    } finally {
+      setProcesandoAccion('')
     }
   }
 
   const handleToggle = async (user) => {
+    if (procesandoAccion) return
     setFormError('')
     const params = new URLSearchParams()
     params.append('id', user.id)
+    setProcesandoAccion(`toggle:${user.id}`)
     try {
       await api.post('/users/toggle', params)
       setSuccessMessage(user.estado ? MENSAJES.USUARIO_SUSPENDIDO : MENSAJES.USUARIO_ACTIVADO)
@@ -301,6 +349,8 @@ function Dashboard() {
     } catch (err) {
       setFormError(obtenerMensajeError(err, 'No fue posible cambiar el estado del usuario.'))
       setTimeout(() => setFormError(''), 4000)
+    } finally {
+      setProcesandoAccion('')
     }
   }
 
@@ -387,7 +437,7 @@ function Dashboard() {
                   style={{ backgroundColor: colores.primario, color: 'white' }}
                   onClick={openCreateUserModal}
                 >
-                  <FiPlus style={{ marginRight: '5px' }} /> Crear Usuario
+                  <FiPlus style={{ marginRight: '5px' }} /> Registrar usuario
                 </button>
               </div>
             )}
@@ -400,22 +450,25 @@ function Dashboard() {
 
             {/* Buscar Usuario */}
             {isAdmin() && (
-                <div className="card p-3 mb-4" style={tarjeta}>
+              <div className="card p-3 mb-4" style={tarjeta}>
                 <h5 className="mb-3">
                   <i className="fa-solid fa-magnifying-glass me-2"></i>
                   Buscar Usuario
                 </h5>
                 <form onSubmit={handleSearch}>
                   <div className="row g-2 align-items-end">
-                    <div className="col-md-10">
-                      <label className="form-label small fw-semibold">ID del usuario</label>
+                    <div className="col-md-8">
+                      <label className="form-label small fw-semibold" htmlFor="buscar-usuario-id">ID del usuario</label>
                       <input
+                        id="buscar-usuario-id"
                         type="number"
+                        min="1"
+                        step="1"
                         className="form-control form-control-sm"
-                        placeholder="Ingrese el ID del usuario"
+                        placeholder="[ Ej: 1 ]"
                         required
                         value={searchId}
-                        onChange={(e) => setSearchId(e.target.value)}
+                        onChange={(e) => { setSearchId(e.target.value); setBusquedaError('') }}
                       />
                     </div>
                     <div className="col-md-2">
@@ -423,21 +476,39 @@ function Dashboard() {
                         <i className="fa-solid fa-search me-1"></i>Buscar
                       </button>
                     </div>
+                    <div className="col-md-2">
+                      <button type="button" className="btn btn-sm btn-outline-secondary w-100" onClick={limpiarBusqueda}>
+                        Limpiar
+                      </button>
+                    </div>
                   </div>
+                  {busquedaError && (
+                    <div className="text-danger small mt-2" role="alert">{busquedaError}</div>
+                  )}
                 </form>
               </div>
             )}
 
-            {/* Resultado de búsqueda */}
-            {searchedUser && (
-              <div className="card p-3 mb-3 border-success">
-                <h5 className="text-success">
-                  <i className="fa-solid fa-circle-check me-2"></i>
-                  Usuario encontrado
-                </h5>
-                <p><strong>ID:</strong> <span>{searchedUser.id}</span></p>
-                <p><strong>nombre:</strong> <span>{searchedUser.nombre}</span></p>
-                <p><strong>Rol:</strong> <span>{searchedUser.rol}</span></p>
+            {/* Estado de la búsqueda */}
+            {filtroId != null && (
+              <div className="card p-3 mb-3" style={tarjeta}>
+                {busquedaSinResultados ? (
+                  <div className="alert alert-warning py-2 small mb-0 d-flex justify-content-between align-items-center gap-2 flex-wrap" role="status">
+                    <span><i className="fa-solid fa-circle-info me-1"></i>No existe un usuario con el ID {filtroId}.</span>
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={limpiarBusqueda}>
+                      Ver todos
+                    </button>
+                  </div>
+                ) : (
+                  <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                    <span className="small text-muted">
+                      <i className="fa-solid fa-filter me-1"></i>Mostrando el usuario con ID {filtroId}.
+                    </span>
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={limpiarBusqueda}>
+                      Limpiar búsqueda
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -457,9 +528,16 @@ function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map(user => (
+                  {usuariosVisibles.length === 0 && (
+                    <tr>
+                      <td colSpan={isAdmin() ? 8 : 7} className="text-center text-muted py-4">
+                        No hay usuarios para mostrar.
+                      </td>
+                    </tr>
+                  )}
+                  {usuariosVisibles.map(user => (
                     <tr key={user.id}>
-                      <td><span style={{ fontSize: '0.75rem', color: '#888', fontFamily: 'monospace' }}>#{user.id}</span></td>
+                      <td><strong>{user.idVisual}</strong></td>
                       <td><strong>{user.nombre}</strong></td>
                       <td>{getRoleBadge(user.rol)}</td>
                       <td className="text-muted">
@@ -487,6 +565,7 @@ function Dashboard() {
                           <button
                             className={`btn btn-sm ${user.estado ? 'btn-outline-warning' : 'btn-outline-success'}`}
                             title={user.estado ? 'Suspender usuario' : 'Activar usuario'}
+                            disabled={Boolean(procesandoAccion)}
                             onClick={() => handleToggle(user)}
                           >
                             <i className={`fa-solid ${user.estado ? 'fa-ban' : 'fa-circle-check'}`}></i>
@@ -494,6 +573,7 @@ function Dashboard() {
                           <button
                             className="btn btn-sm btn-outline-primary ms-1"
                             title="Editar usuario"
+                            disabled={Boolean(procesandoAccion)}
                             onClick={() => handleEdit(user)}
                           >
                             <i className="fa-solid fa-pen"></i>
@@ -502,6 +582,7 @@ function Dashboard() {
                             <button
                               className="btn btn-sm btn-outline-danger ms-1"
                               title="Eliminar usuario"
+                              disabled={Boolean(procesandoAccion)}
                               onClick={() => handleDelete(user)}
                             >
                               <i className="fa-solid fa-trash"></i>
@@ -626,14 +707,14 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeEditUserModal}>Cancelar</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeEditUserModal} disabled={actualizandoUsuario}>Cancelar</button>
                     <button
                       type="submit"
                       className="btn btn-sm"
                       style={{ backgroundColor: colores.primario, color: 'white' }}
-                      disabled={editUserSucursalLoading || Boolean(editUserSucursalError)}
+                      disabled={actualizandoUsuario || editUserSucursalLoading || Boolean(editUserSucursalError)}
                     >
-                      Guardar cambios
+                      {actualizandoUsuario ? 'Guardando…' : 'Guardar cambios'}
                     </button>
                   </div>
                 </form>
@@ -660,7 +741,7 @@ function Dashboard() {
               <div className="modal-content">
                 <div className="modal-header" style={{ backgroundColor: colores.primario, color: 'white' }}>
                   <h5 className="modal-title">
-                    <FiPlus style={{ marginRight: '8px' }} />Crear nuevo usuario
+                    <FiPlus style={{ marginRight: '8px' }} /> Registrar usuario
                   </h5>
                   <button type="button" className="btn-close btn-close-white" onClick={closeCreateUserModal}></button>
                 </div>
@@ -719,7 +800,6 @@ function Dashboard() {
                         {esSuperadmin() && <option value="ADMINISTRADOR">Administrador</option>}
                         <option value="MESERO">Mesero</option>
                         <option value="COCINERO">Cocinero</option>
-                        <option value="CLIENTE">Cliente</option>
                       </select>
                     </div>
 
@@ -766,11 +846,22 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateUserModal}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeCreateUserModal} disabled={creandoUsuario}>
                       Cancelar
                     </button>
-                    <button type="submit" className="btn btn-sm" style={{ backgroundColor: colores.primario, color: 'white' }}>
-                      <FiPlus style={{ marginRight: '5px' }} /> Crear
+                    <button
+                      type="submit"
+                      className="btn btn-sm"
+                      style={{ backgroundColor: colores.primario, color: 'white' }}
+                      disabled={creandoUsuario}
+                    >
+                      {creandoUsuario ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-1"></span>Registrando…
+                        </>
+                      ) : (
+                        <><FiPlus style={{ marginRight: '5px' }} /> Registrar</>
+                      )}
                     </button>
                   </div>
                 </form>
@@ -781,6 +872,34 @@ function Dashboard() {
       )}
     </div>
   )
+}
+
+function chipEstilo(activo) {
+  return {
+    minHeight: '38px',
+    padding: '0 13px',
+    borderRadius: 9999,
+    border: activo ? `1px solid ${colores.primario}` : `1px solid ${colores.borde}`,
+    backgroundColor: activo ? colores.primario : colores.tarjeta,
+    color: activo ? '#FFF' : colores.texto,
+    fontWeight: 600,
+    fontSize: '12.5px',
+    cursor: 'pointer'
+  }
+}
+
+function tabEstilo(activo) {
+  return {
+    minHeight: '40px',
+    padding: '0 18px',
+    borderRadius: 8,
+    border: activo ? `1px solid ${colores.primario}` : `1px solid ${colores.borde}`,
+    backgroundColor: activo ? colores.primario : colores.tarjeta,
+    color: activo ? '#FFF' : colores.texto,
+    fontWeight: 700,
+    fontSize: '13px',
+    cursor: 'pointer'
+  }
 }
 
 export default Dashboard

@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiArrowLeft, FiUser, FiMapPin, FiPhone, FiCheckCircle, FiClipboard } from 'react-icons/fi'
+import { FiArrowLeft, FiUser, FiMapPin, FiPhone, FiCheckCircle, FiClipboard, FiCreditCard, FiDollarSign, FiRepeat, FiLock, FiTruck } from 'react-icons/fi'
 import { crearPedidoInvitado, agregarItemPedido, confirmarPedido } from '../services/pedidos.js'
+import { seleccionarMetodoPago } from '../services/pagos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
 import { obtenerMensajeError } from '../services/mensajes.js'
+import { metodosPagoParaServicio, etiquetaMetodoPago, esPagoEnLinea } from '../utils/pagos.js'
 import SelectorSucursal from '../components/SelectorSucursal.jsx'
 import {
   obtenerSucursalesDisponibles,
@@ -13,6 +15,14 @@ import { formatearDinero } from '../utils/dinero.js'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 
 const formatoPrecio = formatearDinero
+
+const ICONOS_METODO = {
+  EFECTIVO: FiDollarSign,
+  TARJETA: FiCreditCard,
+  TRANSFERENCIA: FiRepeat,
+  PAGO_EN_LINEA: FiLock,
+  CONTRA_ENTREGA: FiTruck
+}
 
 /**
  * RF031 — Pedido como invitado.
@@ -33,23 +43,29 @@ function PedidoInvitado() {
   const navigate = useNavigate()
   const {
     items, subtotal, descuento, impuestos, propina, cupon, total,
-    sucursal, setSucursal, vaciarCarrito
+    tipoServicio, sucursal, setSucursal, vaciarCarrito
   } = useCarrito()
   const [sucursalesDisponibles] = useState(() => obtenerSucursalesDisponibles())
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     nombre: '',
     telefono: '',
-    tipoServicio: 'DOMICILIO',
+    tipoServicio: tipoServicio === 'PARA_LLEVAR' ? 'PARA_LLEVAR' : 'DOMICILIO',
     direccion: '',
     referencia: ''
-  })
+  }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [pedidoConfirmado, setPedidoConfirmado] = useState(null)
+  const [metodoPago, setMetodoPago] = useState('')
 
   const handleChange = (e) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    if (name === 'tipoServicio') {
+      const permitidos = metodosPagoParaServicio(value).map(opcion => opcion.valor)
+      if (!permitidos.includes(metodoPago)) setMetodoPago('')
+    }
+    setFormData(prev => ({ ...prev, [name]: value }))
     setError('')
   }
 
@@ -57,6 +73,9 @@ function PedidoInvitado() {
     { valor: 'DOMICILIO', etiqueta: 'Domicilio', icono: 'fa-solid fa-motorcycle' },
     { valor: 'PARA_LLEVAR', etiqueta: 'Para llevar', icono: 'fa-solid fa-bag-shopping' }
   ]
+
+  const metodosDisponibles = metodosPagoParaServicio(formData.tipoServicio)
+  const pagoEnLineaSeleccionado = esPagoEnLinea(metodoPago)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -78,6 +97,16 @@ function PedidoInvitado() {
       setError('Debe seleccionar una sucursal antes de confirmar el pedido.')
       return
     }
+    if (!metodoPago) {
+      setError('Selecciona un método de pago para continuar.')
+      return
+    }
+    if (pagoEnLineaSeleccionado && formData.tipoServicio === 'DOMICILIO') {
+      setError(
+        'El pago a domicilio en línea requiere pago anticipado. Continúa con el pedido y registra el pago en el resumen.'
+      )
+      return
+    }
 
     setLoading(true)
     try {
@@ -89,6 +118,12 @@ function PedidoInvitado() {
         referencia: formData.referencia.trim(),
         sucursalId: sucursal.id
       })
+
+      try {
+        await seleccionarMetodoPago(pedido.id, metodoPago)
+      } catch (err) {
+        throw new Error(obtenerMensajeError(err, 'No fue posible registrar el método de pago.'))
+      }
 
       // Agregar items al pedido. El backend revalida la disponibilidad
       // por sucursal en cada item; si uno falla, se aborta con un mensaje
@@ -150,6 +185,24 @@ function PedidoInvitado() {
               {pedidoConfirmado.numeroSeguimiento || pedidoConfirmado.id}
             </strong>
           </div>
+          <p style={{ color: colores.textoSuave, fontSize: '13px', marginBottom: '4px' }}>
+            Método de pago: <strong style={{ color: colores.texto }}>{etiquetaMetodoPago(metodoPago)}</strong>
+          </p>
+          {metodoPago === 'EFECTIVO' && (
+            <p style={{ color: colores.textoSuave, fontSize: '12.5px', marginBottom: '12px' }}>
+              <FiDollarSign style={{ marginRight: '5px' }} /> Pagarás en efectivo al recibir o recoger tu pedido.
+            </p>
+          )}
+          {metodoPago === 'TARJETA' && (
+            <p style={{ color: colores.textoSuave, fontSize: '12.5px', marginBottom: '12px' }}>
+              <FiCreditCard style={{ marginRight: '5px' }} /> El pago con tarjeta queda pendiente de confirmación.
+            </p>
+          )}
+          {metodoPago === 'TRANSFERENCIA' && (
+            <p style={{ color: colores.textoSuave, fontSize: '12.5px', marginBottom: '12px' }}>
+              <FiRepeat style={{ marginRight: '5px' }} /> El restaurante confirmará tu pago al verificar la transferencia.
+            </p>
+          )}
           <p style={{ color: colores.textoSuave, fontSize: '13px' }}>
             Guarda este número para hacer seguimiento a tu pedido.
           </p>
@@ -313,6 +366,63 @@ function PedidoInvitado() {
                   </div>
                 )}
 
+                <div className="mb-3">
+                  <label className="form-label small fw-semibold">Método de pago *</label>
+                  <div className="row g-2">
+                    {metodosDisponibles.map(metodo => {
+                      const activo = metodoPago === metodo.valor
+                      const Icono = ICONOS_METODO[metodo.valor] || FiDollarSign
+                      return (
+                        <div className="col-6" key={metodo.valor}>
+                          <label
+                            style={{
+                              cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', gap: '10px',
+                              padding: '14px',
+                              borderRadius: radios.md,
+                              backgroundColor: activo ? colores.mint : colores.tarjeta,
+                              border: activo ? `2px solid ${colores.primario}` : `1px solid ${colores.borde}`,
+                              fontWeight: 600,
+                              color: colores.texto,
+                              minHeight: '56px'
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name="metodoPago"
+                              value={metodo.valor}
+                              checked={activo}
+                              onChange={() => { setMetodoPago(metodo.valor); setError('') }}
+                              style={{ accentColor: colores.primario }}
+                            />
+                            <span><Icono style={{ marginRight: '6px' }} /> {metodo.etiqueta}</span>
+                          </label>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {metodoPago && (
+                    <small style={{ display: 'block', color: colores.textoSuave, marginTop: '7px' }}>
+                      {metodosDisponibles.find(opcion => opcion.valor === metodoPago)?.descripcion}
+                    </small>
+                  )}
+                  {pagoEnLineaSeleccionado && (
+                    <div style={{
+                      marginTop: '8px', backgroundColor: colores.advertenciaFondo,
+                      color: colores.advertenciaTexto, borderRadius: radios.sm,
+                      padding: '10px 12px', fontSize: '12.5px', display: 'flex', gap: '8px'
+                    }}>
+                      <FiLock style={{ flexShrink: 0, marginTop: '2px' }} />
+                      <span>
+                        {formData.tipoServicio === 'DOMICILIO'
+                          ? 'Pago a domicilio en línea: requiere pago anticipado. El saldo se registrará en el resumen del pedido.'
+                          : 'Pago en línea para llevar: selecciona este método y registra el pago en el resumen del pedido.'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="mb-1">
                   <label className="form-label small fw-semibold">Referencia (opcional)</label>
                   <input
@@ -330,12 +440,15 @@ function PedidoInvitado() {
                   className="btn w-100 mt-3"
                   style={{ ...btnPrimario, minHeight: '50px' }}
                   disabled={loading}
+                  title={pagoEnLineaSeleccionado ? 'El pago se registrará en el resumen del pedido.' : 'Confirmar pedido'}
                 >
                   {loading ? (
                     <>
                       <span className="spinner-border spinner-border-sm me-2"></span>
                       Creando pedido...
                     </>
+                  ) : pagoEnLineaSeleccionado ? (
+                    <><FiLock style={{ marginRight: '6px' }} /> Confirmar (pendiente de pago)</>
                   ) : (
                     `Confirmar pedido (${formatoPrecio(total)})`
                   )}

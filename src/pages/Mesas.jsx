@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   FiPlus, FiX, FiCheckCircle, FiXCircle, FiGrid, FiLink2, FiCopy, FiExternalLink,
@@ -12,6 +12,9 @@ import ModalPedidoManual from '../components/ModalPedidoManual.jsx'
 import { usePedidosActivos } from '../hooks/usePedidosActivos.js'
 import { actualizarEstadoPedido } from '../services/pedidos.js'
 import { etiquetaEstado } from '../utils/pedidos.js'
+import { resumirPagosMesa } from '../utils/pagos.js'
+import { formatearDinero } from '../utils/dinero.js'
+import EstadoPagoBadge from '../components/EstadoPagoBadge.jsx'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, input } from '../styles/tokens.js'
 
 function Mesas() {
@@ -74,6 +77,22 @@ function Mesas() {
     return () => window.removeEventListener('keydown', manejarEscape)
   }, [showCreateModal, qrMesa])
 
+  // RF049 — El estado de la mesa cambia cuando un pedido se crea, avanza o se
+  // paga. No se añade polling propio: `usePedidosActivos` ya entrega los
+  // cambios (SSE con respaldo). Solo se recarga la lista de mesas cuando la
+  // firma de pedidos activos cambia de verdad.
+  const firmaPedidosRef = useRef('')
+  useEffect(() => {
+    if (!currentUser) return
+    const firma = pedidos
+      .map(pedido => `${pedido.id}:${pedido.estado}:${pedido.pagoEstado || ''}`)
+      .sort()
+      .join('|')
+    if (firma === firmaPedidosRef.current) return
+    firmaPedidosRef.current = firma
+    loadMesas()
+  }, [pedidos, currentUser])
+
   const checkAuth = async () => {
     try {
       const response = await api.get('/api/auth/me')
@@ -121,7 +140,7 @@ function Mesas() {
           setErrorMessage(err.response.data?.error || 'Error al cargar las mesas.')
         }
       } else {
-        setErrorMessage('Error de conexión con el servidor.')
+        setErrorMessage('Error de conexión. Intenta nuevamente.')
       }
     }
   }
@@ -221,7 +240,7 @@ function Mesas() {
       if (err.response) {
         setErrorMessage(err.response.data?.error || 'Error al crear la mesa')
       } else {
-        setErrorMessage('Error de conexión con el servidor')
+        setErrorMessage('Error de conexión. Intenta nuevamente.')
       }
     }
   }
@@ -239,7 +258,7 @@ function Mesas() {
       if (err.response) {
         setErrorMessage(err.response.data?.error || 'Error al cambiar el estado de la mesa')
       } else {
-        setErrorMessage('Error de conexión con el servidor')
+        setErrorMessage('Error de conexión. Intenta nuevamente.')
       }
       setTimeout(() => setErrorMessage(''), 4000)
     }
@@ -255,6 +274,23 @@ function Mesas() {
     if (!mesaSeleccionada) return []
     return pedidos.filter(pedido => pedido.mesaId === mesaSeleccionada.id)
   }, [pedidos, mesaSeleccionada])
+
+  const pagosPorMesa = useMemo(() => {
+    const agrupados = new Map()
+    pedidos.forEach(pedido => {
+      if (!pedido.mesaId) return
+      const lista = agrupados.get(pedido.mesaId) || []
+      lista.push(pedido)
+      agrupados.set(pedido.mesaId, lista)
+    })
+    const resumen = {}
+    agrupados.forEach((lista, mesaId) => {
+      resumen[mesaId] = resumirPagosMesa(lista)
+    })
+    return resumen
+  }, [pedidos])
+
+  const pagoMesaSeleccionada = mesaSeleccionada ? pagosPorMesa[mesaSeleccionada.id] : null
 
   const cambiarEstadoPedido = async (pedido, estado) => {
     if (pedidoActualizando) return
@@ -332,6 +368,7 @@ function Mesas() {
     ? `${window.location.origin}/menu?mesa=${encodeURIComponent(qrMesa.codigo)}`
     : ''
   const mesasActivas = conteo('activas')
+  const mesasOcupadas = mesas.filter(mesa => mesa.estado === 'OCUPADA').length
 
   return (
     <div className="nexdine-shell" style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
@@ -351,7 +388,7 @@ function Mesas() {
                 ? (esMesero ? 'Sin mesas activas asignadas' : 'Sin mesas registradas')
                 : esMesero
                   ? `${mesas.length} mesas activas disponibles para atender`
-                  : `${mesasActivas} de ${mesas.length} mesas activas`}
+                  : `${mesasActivas} de ${mesas.length} mesas activas · ${mesasOcupadas} ocupadas`}
             </small>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
@@ -606,7 +643,15 @@ function Mesas() {
               <span style={estiloBadge(colores.superficie, colores.textoSuave)}>
                 {pedidosMesa.length}
               </span>
+              {pagoMesaSeleccionada?.cantidad > 0 && (
+                <EstadoPagoBadge estado={pagoMesaSeleccionada.estado} />
+              )}
               <small style={{ color: colores.textoSuave, marginLeft: 'auto' }}>
+                {pagoMesaSeleccionada?.cantidad > 0 && (
+                  <strong style={{ color: colores.texto }}>
+                    Total activo {formatearDinero(pagoMesaSeleccionada.total)} ·{' '}
+                  </strong>
+                )}
                 {enTiempoReal
                   ? 'Los cambios se reciben en tiempo real.'
                   : 'La lista se sincroniza automáticamente cada 15 segundos.'}
@@ -738,6 +783,19 @@ function Mesas() {
                       <span style={{ color: colores.textoSuave }}>Identificador</span>
                       <code style={{ color: colores.texto, fontWeight: 600, fontSize: '12px' }}>{mesa.codigo}</code>
                     </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                      <span style={{ color: colores.textoSuave }}>Estado de la mesa</span>
+                      <span style={estiloBadge(
+                        mesa.estado === 'OCUPADA' ? colores.advertenciaFondo : colores.mint,
+                        mesa.estado === 'OCUPADA' ? colores.advertenciaTexto : colores.primario
+                      )}>
+                        <span style={{
+                          width: '6px', height: '6px', borderRadius: '50%',
+                          backgroundColor: mesa.estado === 'OCUPADA' ? colores.advertencia : colores.exito
+                        }} />
+                        {mesa.estado === 'OCUPADA' ? 'Ocupada' : 'Libre'}
+                      </span>
+                    </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                       <span style={{ color: colores.textoSuave }}>Pedidos QR</span>
                       <span style={{ color: colores.exitoTexto, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -750,6 +808,20 @@ function Mesas() {
                         {pedidos.filter(pedido => pedido.mesaId === mesa.id).length}
                       </span>
                     </div>
+                    {pagosPorMesa[mesa.id]?.cantidad > 0 && (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                          <span style={{ color: colores.textoSuave }}>Total activo</span>
+                          <span className="tnum" style={{ color: colores.texto, fontWeight: 600 }}>
+                            {formatearDinero(pagosPorMesa[mesa.id].total)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                          <span style={{ color: colores.textoSuave }}>Estado de pago</span>
+                          <EstadoPagoBadge estado={pagosPorMesa[mesa.id].estado} />
+                        </div>
+                      </>
+                    )}
                     {!mesa.activa && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ color: colores.textoSuave }}>Estado</span>
