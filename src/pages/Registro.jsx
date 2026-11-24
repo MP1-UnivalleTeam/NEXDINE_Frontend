@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FiArrowLeft, FiCheckCircle, FiUserPlus, FiXCircle } from 'react-icons/fi'
-import { registrarCliente } from '../services/clientes.js'
+import { registrarCliente, registrarDueno } from '../services/clientes.js'
 import { obtenerMensajeError } from '../services/mensajes.js'
 import { colores, sombras, radios, btnPrimario, btnGhost, input } from '../styles/tokens.js'
 
@@ -50,24 +50,26 @@ function Registro() {
       return
     }
 
-    if (tipoCuenta === 'ADMINISTRADOR') {
-      // El backend actual no expone un endpoint público de registro para
-      // cuentas de dueño/administrador; esa creación se gestiona desde el
-      // panel administrativo. No se inventa ninguna operación nueva.
-      setError('El registro de cuentas de dueño debe gestionarse desde el panel administrativo del restaurante.')
-      return
-    }
-
     setEnviando(true)
     setError('')
     try {
-      await registrarCliente({
-        nombre: datos.nombre.trim(),
-        correo: datos.correo.trim(),
-        celular: datos.celular.trim(),
-        direccion: datos.direccion.trim(),
-        contrasena: datos.contrasena
-      })
+      if (tipoCuenta === 'ADMINISTRADOR') {
+        await registrarDueno({
+          nombre: datos.nombre.trim(),
+          correo: datos.correo.trim(),
+          celular: datos.celular.trim(),
+          direccion: datos.direccion.trim(),
+          contrasena: datos.contrasena
+        })
+      } else {
+        await registrarCliente({
+          nombre: datos.nombre.trim(),
+          correo: datos.correo.trim(),
+          celular: datos.celular.trim(),
+          direccion: datos.direccion.trim(),
+          contrasena: datos.contrasena
+        })
+      }
       setRegistrado(true)
     } catch (err) {
       if ([404, 405, 501].includes(err?.response?.status)) {
@@ -91,9 +93,13 @@ function Registro() {
           boxShadow: sombras.nivel3, background: colores.tarjeta, textAlign: 'center'
         }}>
           <FiCheckCircle size={38} style={{ color: colores.exito }} />
-          <h4 className="mt-3" style={{ fontWeight: 700, color: colores.texto }}>Cuenta creada</h4>
+          <h4 className="mt-3" style={{ fontWeight: 700, color: colores.texto }}>
+            {tipoCuenta === 'ADMINISTRADOR' ? 'Cuenta creada correctamente' : 'Cuenta creada'}
+          </h4>
           <p style={{ color: colores.textoSuave, fontSize: '14px' }}>
-            Tu cuenta está lista. Ya puedes hacer tus pedidos en NEXDINE.
+            {tipoCuenta === 'ADMINISTRADOR'
+              ? 'La cuenta del dueño del restaurante fue creada correctamente. Ya puedes iniciar sesión para gestionar tu restaurante.'
+              : 'Tu cuenta está lista. Ya puedes hacer tus pedidos en NEXDINE.'}
           </p>
           <button
             type="button"
@@ -331,7 +337,9 @@ function Registro() {
         </button>
 
         <small style={{ display: 'block', color: colores.textoSuave, fontSize: '11.5px', marginTop: '14px', textAlign: 'center' }}>
-          El registro crea una cuenta de cliente para hacer pedidos.
+          {tipoCuenta === 'ADMINISTRADOR'
+            ? 'El registro crea la cuenta del dueño del restaurante.'
+            : 'El registro crea una cuenta de cliente para hacer pedidos.'}
         </small>
       </div>
     </div>

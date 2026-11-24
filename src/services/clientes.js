@@ -16,3 +16,20 @@ export async function registrarCliente(datos) {
   })
   return response.data
 }
+
+/**
+ * Registro público de dueño de restaurante.
+ *
+ * Usa el endpoint real de registro de dueño del servicio de autenticación.
+ * El backend crea la cuenta con rol ADMINISTRADOR.
+ */
+export async function registrarDueno(datos) {
+  const response = await api.post('/api/auth/register/dueño', {
+    nombre: datos.nombre,
+    contrasena: datos.contrasena,
+    celular: datos.celular,
+    direccion: datos.direccion,
+    correo: datos.correo
+  })
+  return response.data
+}
