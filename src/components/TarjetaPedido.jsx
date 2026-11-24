@@ -1,4 +1,6 @@
-import { FiCheckCircle, FiClock, FiCreditCard, FiXCircle, FiUser, FiPhone, FiMapPin, FiHash } from 'react-icons/fi'
+import { useState } from 'react'
+import { FiCheckCircle, FiClock, FiCreditCard, FiXCircle, FiUser, FiPhone, FiMapPin, FiHash, FiFileText } from 'react-icons/fi'
+import ModalFactura from './ModalFactura.jsx'
 import { colores, tarjeta, radios, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 import { formatearDinero } from '../utils/dinero.js'
 import EstadoPagoBadge from './EstadoPagoBadge.jsx'
@@ -21,8 +23,10 @@ function TarjetaPedido({
   permitirAcciones = false,
   permitirCancelar = true,
   siguientePersonalizado,
-  compacto = false
+  compacto = false,
+  permitirFactura
 }) {
+  const [modalFactura, setModalFactura] = useState(false)
   if (!pedido) return null
 
   const estado = infoEstado(pedido.estado)
@@ -34,6 +38,10 @@ function TarjetaPedido({
   const cancelado = normalizarEstado(pedido.estado) === 'CANCELADO'
   const pagado = estaPagado(pedido.pagoEstado)
   const totalProductos = contarProductos(pedido)
+  const estadoClave = normalizarEstado(pedido.estado)
+  // La factura se habilita cuando el pedido está listo (o ya entregado).
+  const puedeFacturar = (permitirFactura ?? permitirAcciones)
+    && (estadoClave === 'LISTO' || estadoClave === 'ENTREGADO')
 
   const cambiar = (nuevoEstado) => {
     if (actualizando || !onCambiarEstado) return
@@ -179,6 +187,21 @@ function TarjetaPedido({
         </button>
       )}
 
+      {puedeFacturar && (
+        <button
+          type="button"
+          className="btn w-100"
+          onClick={() => setModalFactura(true)}
+          style={{
+            ...btnGhost, minHeight: '40px', fontSize: '13px', marginTop: '12px',
+            color: colores.primario, borderColor: colores.primario
+          }}
+        >
+          <FiFileText style={{ marginRight: '6px' }} />
+          Generar factura
+        </button>
+      )}
+
       {permitirAcciones && !finalizado && (siguiente || permitirCancelar) && (
         <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
           {siguiente && (
@@ -211,6 +234,9 @@ function TarjetaPedido({
         <small role="status" style={{ color: colores.textoSuave, marginTop: '8px' }}>
           Guardando el nuevo estado…
         </small>
+      )}
+      {modalFactura && (
+        <ModalFactura pedido={pedido} onCerrar={() => setModalFactura(false)} />
       )}
     </article>
   )

@@ -16,6 +16,7 @@
 import { useNavigate } from 'react-router-dom'
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
 import { colores } from '../styles/tokens.js'
+import AvisosRecordatorios from './AvisosRecordatorios.jsx'
 
 const LINK_BASE = {
   color: 'rgba(255,255,255,0.78)',
@@ -182,13 +183,14 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
               </a>
             </li>
             <li className="nav-item">
-              <span
-                className="nav-link"
-                style={{ ...LINK_BASE, opacity: 0.5, cursor: 'not-allowed' }}
-                title="Próximamente"
-              >
+              <a href="/reportes" className="nav-link" style={estilo('/reportes')}>
                 <i className="fa-solid fa-chart-line"></i> Reportes
-              </span>
+              </a>
+            </li>
+            <li className="nav-item">
+              <a href="/recordatorios" className="nav-link" style={estilo('/recordatorios')}>
+                <i className="fa-solid fa-bell"></i> Recordatorios
+              </a>
             </li>
           </>
         )}
@@ -234,6 +236,9 @@ function Sidebar({ currentUser, rutaActual, onLogout }) {
           <i className="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
         </a>
       </div>
+
+      {/* Avisos de recordatorios programados (solo personal administrativo) */}
+      {esAdmin && <AvisosRecordatorios />}
     </div>
   )
 }

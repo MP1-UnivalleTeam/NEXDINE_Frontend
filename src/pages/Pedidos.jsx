@@ -483,6 +483,7 @@ function Pedidos() {
                   actualizando={actualizando === pedido.id}
                   permitirAcciones={tab === 'cocina' ? ROLES_COCINA.includes(currentUser.rol) : true}
                   permitirCancelar={tab !== 'cocina'}
+                  permitirFactura={currentUser.rol !== 'COCINERO'}
                   siguientePersonalizado={tab === 'cocina' ? transicionCocina(pedido.estado) : undefined}
                 />
               </div>

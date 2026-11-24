@@ -4,6 +4,7 @@ import { FiArrowLeft, FiPackage, FiRefreshCw } from 'react-icons/fi'
 import api from '../services/api.js'
 import PagoPedido from '../components/PagoPedido.jsx'
 import EstadoPagoBadge from '../components/EstadoPagoBadge.jsx'
+import SeguimientoEstadoPedido from '../components/SeguimientoEstadoPedido.jsx'
 import { obtenerResumenPedido } from '../services/pedidos.js'
 import { obtenerMensajeError } from '../services/mensajes.js'
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
@@ -140,6 +141,8 @@ function ResumenPedido() {
           <span className="badge bg-secondary">{etiquetaEstado(resumen.estado)}</span>
         </p>
       )}
+
+      <SeguimientoEstadoPedido resumen={resumen} onActualizado={setResumen} />
 
       <div className="d-flex align-items-center gap-2 flex-wrap mb-3">
         <EstadoPagoBadge estado={resumen.pagoEstado} />

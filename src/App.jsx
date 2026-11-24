@@ -14,6 +14,8 @@ import ParaLlevar from './pages/ParaLlevar.jsx'
 import Domicilios from './pages/Domicilios.jsx'
 import Favoritos from './pages/Favoritos.jsx'
 import Impuestos from './pages/Impuestos.jsx'
+import Reportes from './pages/Reportes.jsx'
+import Recordatorios from './pages/Recordatorios.jsx'
 import { CarritoProvider } from './context/CarritoContext.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
@@ -37,6 +39,8 @@ function App() {
             <Route path="/favoritos" element={<Favoritos />} />
             <Route path="/sucursales" element={<Sucursales />} />
             <Route path="/impuestos" element={<Impuestos />} />
+            <Route path="/reportes" element={<Reportes />} />
+            <Route path="/recordatorios" element={<Recordatorios />} />
             <Route path="/carrito" element={<Carrito />} />
             <Route path="/pedido" element={<PedidoInvitado />} />
             <Route path="/resumen/:pedidoId" element={<ResumenPedido />} />
