@@ -6,9 +6,10 @@ import {
 } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import { UbicacionActual } from '../components/EncabezadoPagina.jsx'
 import {
   PERIODOS, calcularRango, desplazarReferencia, describirRango, aFechaISO, desdeFechaISO,
-  obtenerReporteVentas, generarReporteEjemplo
+  obtenerReporteVentas, generarReporteEjemplo, obtenerRegistroDiario
 } from '../services/reportes.js'
 import { exportarPdf, exportarExcel, esEndpointNoDisponible } from '../utils/exportar.js'
 import { formatearDinero } from '../utils/dinero.js'
@@ -173,6 +174,7 @@ function Reportes() {
   const [sinBackend, setSinBackend] = useState(false)
   const [verEjemplo, setVerEjemplo] = useState(false)
   const [exportando, setExportando] = useState('')
+  const [registroDiario, setRegistroDiario] = useState([])
 
   const rango = useMemo(() => calcularRango(periodo, referencia), [periodo, referencia])
   const textoRango = describirRango(periodo, rango)
@@ -201,6 +203,7 @@ function Reportes() {
       const datos = await obtenerReporteVentas({ periodo, ...rango, sucursalId })
       setReporte(datos)
       setSinBackend(false)
+      obtenerRegistroDiario({ ...rango, sucursalId }).then(setRegistroDiario).catch(() => setRegistroDiario([]))
     } catch (err) {
       if (esEndpointNoDisponible(err)) {
         setSinBackend(true)
@@ -338,6 +341,7 @@ function Reportes() {
       <div className="nexdine-main" style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
           <div>
+            <UbicacionActual />
             <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Reportes de ventas</h2>
             <small style={{ color: colores.textoSuave }}>{mayusculaInicial(textoRango)}</small>
           </div>
@@ -487,6 +491,31 @@ function Reportes() {
                 </div>
               </div>
             </div>
+
+            {!reporte?.ejemplo && registroDiario.length > 0 && (
+              <div style={{ ...tarjeta, padding: '18px', marginBottom: '16px' }}>
+                <h6 style={{ fontWeight: 700, color: colores.texto, marginBottom: '4px' }}>Registro diario automático</h6>
+                <small style={{ color: colores.textoSuave, display: 'block', marginBottom: '10px' }}>
+                  El sistema guarda cada 5 minutos el total de ventas y la cantidad de pedidos de cada día.
+                </small>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table table-sm mb-0" style={{ fontSize: '13px', minWidth: '520px' }}>
+                    <thead><tr><th>Día</th><th className="text-end">Pedidos</th><th className="text-end">Cancelados</th><th className="text-end">Propinas</th><th className="text-end">Ventas</th></tr></thead>
+                    <tbody>
+                      {registroDiario.map(d => (
+                        <tr key={d.fecha}>
+                          <td>{mayusculaInicial(desdeFechaISO(d.fecha).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
+                          <td className="text-end tnum">{numero(d.numeroPedidos)}</td>
+                          <td className="text-end tnum">{numero(d.pedidosCancelados)}</td>
+                          <td className="text-end tnum">{formatearDinero(d.propinas)}</td>
+                          <td className="text-end tnum"><strong>{formatearDinero(d.totalVentas)}</strong></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div style={{ ...tarjeta, padding: '18px' }}>
               <h6 style={{ fontWeight: 700, color: colores.texto, marginBottom: '10px' }}>Detalle de pedidos</h6>

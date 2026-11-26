@@ -5,7 +5,7 @@ import { formatearDinero } from '../utils/dinero.js'
 import { generarFacturaPdf, numeroFacturaProvisional, TIPOS_DOCUMENTO } from '../utils/factura.js'
 import { esEndpointNoDisponible, nombreArchivoSeguro } from '../utils/exportar.js'
 import {
-  obtenerEmisor, guardarEmisorLocal, emitirFactura, enviarFacturaPorCorreo, EMISOR_VACIO
+  obtenerEmisor, guardarEmisorLocal, guardarEmisorServidor, emitirFactura, enviarFacturaPorCorreo, EMISOR_VACIO
 } from '../services/facturas.js'
 
 const CORREO_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -37,6 +37,7 @@ function ModalFactura({ pedido, onCerrar }) {
 
   // Abierta si al cargar faltan los datos obligatorios del emisor; luego la controla el usuario.
   const [emisorAbierto, setEmisorAbierto] = useState(true)
+  const [emisorEditado, setEmisorEditado] = useState(false)
 
   useEffect(() => {
     let activo = true
@@ -60,7 +61,25 @@ function ModalFactura({ pedido, onCerrar }) {
   }, [onCerrar, procesando])
 
   const cambiarCliente = (campo) => (e) => setCliente(prev => ({ ...prev, [campo]: e.target.value }))
-  const cambiarEmisor = (campo) => (e) => setEmisor(prev => ({ ...prev, [campo]: e.target.value }))
+  const cambiarEmisor = (campo) => (e) => {
+    setEmisorEditado(true)
+    setEmisor(prev => ({ ...prev, [campo]: e.target.value }))
+  }
+
+  // Los datos del emisor viven en el servidor; solo un administrador puede cambiarlos.
+  const guardarEmisorSiCambio = async () => {
+    if (emisor.origen !== 'servidor' || (!emisorEditado && emisor.configurado)) return
+    try {
+      const guardado = await guardarEmisorServidor(emisor)
+      setEmisor(guardado)
+      setEmisorEditado(false)
+    } catch (err) {
+      if (err.response?.status === 403) {
+        throw new Error('Solo un administrador puede guardar los datos del emisor. Pídele que los configure.')
+      }
+      throw err
+    }
+  }
 
   const validar = ({ requiereCorreo }) => {
     if (!emisor.razonSocial.trim() || !emisor.nit.trim()) {
@@ -84,6 +103,7 @@ function ModalFactura({ pedido, onCerrar }) {
   // se usa una numeración provisional claramente marcada en el PDF.
   const asegurarFactura = async () => {
     if (factura) return factura
+    await guardarEmisorSiCambio()
     let datos
     try {
       const emitida = await emitirFactura(pedido.id, cliente)
@@ -113,7 +133,7 @@ function ModalFactura({ pedido, onCerrar }) {
       doc.save(`factura-${nombreArchivoSeguro(datosFactura.numero)}.pdf`)
       setExito(`Factura ${datosFactura.numero} descargada.`)
     } catch (err) {
-      setError(err.response?.data?.error || 'No fue posible generar la factura.')
+      setError(err.response?.data?.error || err.message || 'No fue posible generar la factura.')
     } finally {
       setProcesando('')
     }
@@ -136,11 +156,12 @@ function ModalFactura({ pedido, onCerrar }) {
       })
       setExito(`Factura ${generado.datosFactura.numero} enviada a ${cliente.correo.trim()}.`)
     } catch (err) {
-      if (generado && esEndpointNoDisponible(err)) {
+      const sinCorreo = err.response?.status === 503 || esEndpointNoDisponible(err)
+      if (generado && sinCorreo) {
         generado.doc.save(`factura-${nombreArchivoSeguro(generado.datosFactura.numero)}.pdf`)
-        setAviso('El envío por correo todavía no está disponible en el servidor. Descargamos el PDF para que puedas enviarlo manualmente.')
+        setAviso('El servidor todavía no tiene configurado el envío de correos. Descargamos el PDF para que puedas enviarlo manualmente.')
       } else {
-        setError(err.response?.data?.error || 'No fue posible enviar la factura.')
+        setError(err.response?.data?.error || err.message || 'No fue posible enviar la factura.')
       }
     } finally {
       setProcesando('')
@@ -251,16 +272,15 @@ function ModalFactura({ pedido, onCerrar }) {
                     <div key={campo} className={clase}>
                       <label style={etiqueta} htmlFor={`emisor-${campo}`}>{texto}</label>
                       <input id={`emisor-${campo}`} value={emisor[campo] || ''} onChange={cambiarEmisor(campo)}
-                        disabled={emisor.origen === 'servidor'}
                         style={{ ...input, width: '100%', padding: '0 12px', backgroundColor: colores.tarjeta }} />
                     </div>
                   ))}
                 </div>
-                {emisor.origen !== 'servidor' && (
-                  <small style={{ color: colores.textoSuave, display: 'block', marginTop: '8px' }}>
-                    Se guardan solo en este navegador hasta que el servidor administre los datos de facturación.
-                  </small>
-                )}
+                <small style={{ color: colores.textoSuave, display: 'block', marginTop: '8px' }}>
+                  {emisor.origen === 'servidor'
+                    ? 'Se guardan en el servidor para todas las facturas del restaurante (solo el administrador puede cambiarlos).'
+                    : 'Sin conexión con el servidor: se guardan solo en este navegador.'}
+                </small>
               </details>
 
               {error && (

@@ -50,6 +50,7 @@ function PedidoInvitado() {
   const [formData, setFormData] = useState(() => ({
     nombre: '',
     telefono: '',
+    correo: '',
     tipoServicio: tipoServicio === 'PARA_LLEVAR' ? 'PARA_LLEVAR' : 'DOMICILIO',
     direccion: '',
     referencia: ''
@@ -89,6 +90,10 @@ function PedidoInvitado() {
       setError('El teléfono es obligatorio')
       return
     }
+    if (formData.correo.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.correo.trim())) {
+      setError('El correo no es válido')
+      return
+    }
     if (formData.tipoServicio === 'DOMICILIO' && !formData.direccion.trim()) {
       setError('La dirección es obligatoria para domicilio')
       return
@@ -116,7 +121,8 @@ function PedidoInvitado() {
         tipoServicio: formData.tipoServicio,
         direccion: formData.direccion.trim(),
         referencia: formData.referencia.trim(),
-        sucursalId: sucursal.id
+        sucursalId: sucursal.id,
+        correo: formData.correo.trim()
       })
 
       try {
@@ -313,6 +319,21 @@ function PedidoInvitado() {
                     required
                     style={{ ...input2, width: '100%' }}
                   />
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small fw-semibold" htmlFor="correo-avisos">Correo (opcional)</label>
+                  <input
+                    id="correo-avisos"
+                    type="email"
+                    name="correo"
+                    autoComplete="email"
+                    placeholder="tucorreo@ejemplo.com"
+                    value={formData.correo}
+                    onChange={handleChange}
+                    style={{ ...input2, width: '100%' }}
+                  />
+                  <small style={{ color: colores.textoSuave }}>Te avisaremos por correo cada vez que cambie el estado de tu pedido.</small>
                 </div>
 
                 <div className="mb-3">

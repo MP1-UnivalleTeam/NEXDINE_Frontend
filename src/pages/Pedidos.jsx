@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import EncabezadoPagina from '../components/EncabezadoPagina.jsx'
 import TarjetaPedido from '../components/TarjetaPedido.jsx'
 import ModalPago from '../components/ModalPago.jsx'
 import { usePedidosActivos } from '../hooks/usePedidosActivos.js'
@@ -20,11 +21,10 @@ import { colores, tarjeta, radios, btnGhost, estiloBadge, input } from '../style
 const ROLES_PERSONAL = ['MESERO', 'COCINERO', 'ADMINISTRADOR', 'SUPERADMIN']
 const ROLES_COCINA = ['COCINERO', 'ADMINISTRADOR', 'SUPERADMIN']
 
+// Cocina, Para llevar y Domicilios tienen su propio módulo en el menú:
+// esta pantalla muestra todos los pedidos en curso, sin pestañas duplicadas.
 const TABS = [
-  { id: 'activos', etiqueta: 'Activos', roles: ROLES_PERSONAL },
-  { id: 'cocina', etiqueta: 'Cocina', roles: ROLES_COCINA },
-  { id: 'para-llevar', etiqueta: 'Para llevar', roles: ROLES_PERSONAL },
-  { id: 'domicilios', etiqueta: 'Domicilios', roles: ROLES_PERSONAL }
+  { id: 'activos', etiqueta: 'Activos', roles: ROLES_PERSONAL }
 ]
 
 function transicionCocina(estado) {
@@ -172,12 +172,12 @@ function Pedidos() {
     cargarNotificaciones()
   }
 
-  const cambiarEstado = async (pedido, estado) => {
+  const cambiarEstado = async (pedido, estado, motivo) => {
     if (actualizando) return
     setActualizando(pedido.id)
     setErrorAccion('')
     try {
-      await actualizarEstadoPedido(pedido.id, estado)
+      await actualizarEstadoPedido(pedido.id, estado, motivo)
       setSuccessMessage(`${pedido.numeroSeguimiento || 'Pedido'} actualizado a ${etiquetaEstado(estado).toLowerCase()}.`)
       await recargar()
       setTimeout(() => setSuccessMessage(''), 4000)
@@ -225,18 +225,10 @@ function Pedidos() {
       <Sidebar currentUser={currentUser} rutaActual="/pedidos" onLogout={handleLogout} />
 
       <div className="nexdine-main" style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          flexWrap: 'wrap', gap: '12px', marginBottom: '20px'
-        }}>
-          <div>
-            <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Pedidos</h2>
-            <small style={{ color: colores.textoSuave }}>
-              {pedidosBase.length === 0 ? 'Sin pedidos en esta vista' : `${pedidosBase.length} pedidos en esta vista`}
-              {' · '}Actualizado a las {horaActualizacion}
-            </small>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <EncabezadoPagina
+          descripcion={`${pedidosBase.length === 0 ? 'Sin pedidos en curso' : `${pedidosBase.length} pedido(s) en curso`} · Actualizado a las ${horaActualizacion}`}
+          acciones={(
+            <>
             <button
               type="button"
               className="btn"
@@ -280,8 +272,9 @@ function Pedidos() {
               <FiRefreshCw style={{ marginRight: '6px' }} />
               {cargando ? 'Actualizando…' : 'Actualizar'}
             </button>
-          </div>
-        </div>
+            </>
+          )}
+        />
 
         {mostrarNotificaciones && (
           <div style={{ ...tarjeta, padding: '14px 16px', marginBottom: '14px' }}>
@@ -319,7 +312,7 @@ function Pedidos() {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+        {tabsDisponibles.length > 1 && <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
           {tabsDisponibles.map(opcion => (
             <button
               key={opcion.id}
@@ -330,7 +323,7 @@ function Pedidos() {
               {opcion.etiqueta}
             </button>
           ))}
-        </div>
+        </div>}
 
         {tab === 'cocina' && (
           <div style={{

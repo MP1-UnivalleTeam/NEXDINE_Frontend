@@ -6,33 +6,42 @@
  * ninguna pantalla introduzca colores propios fuera de esta guía.
  */
 
+/**
+ * Los colores son variables CSS (definidas en design.css) para que el modo
+ * oscuro (RF026) y el color de acento del perfil (RF029) cambien toda la
+ * interfaz sin tocar cada pantalla. Los valores claros originales están en
+ * los comentarios.
+ */
 export const colores = {
   // Identidad
-  primario: '#11362E',      // Verde bosque profundo: navbar, CTAs, marcas
-  secundario: '#2D6A4F',    // Verde interactivo: hover, acciones secundarias
-  mint: '#E8F5E9',          // Superficie suave: selección activa, contadores
+  primario: 'var(--nx-primario)',          // #11362E Verde bosque profundo: navbar, CTAs, marcas
+  secundario: 'var(--nx-secundario)',      // #2D6A4F Verde interactivo: hover, acciones secundarias
+  mint: 'var(--nx-mint)',                  // #E8F5E9 Superficie suave: selección activa, contadores
 
   // Neutrales
-  fondo: '#F8FAFC',         // Lienzo general
-  superficie: '#F1F5F9',    // Superficies secundarias
-  tarjeta: '#FFFFFF',       // Tarjetas y modales
-  borde: '#E2E8F0',         // Bordes discretos
+  fondo: 'var(--nx-fondo)',                // #F8FAFC Lienzo general
+  superficie: 'var(--nx-superficie)',      // #F1F5F9 Superficies secundarias
+  tarjeta: 'var(--nx-tarjeta)',            // #FFFFFF Tarjetas y modales
+  borde: 'var(--nx-borde)',                // #E2E8F0 Bordes discretos
 
   // Texto
-  texto: '#1E293B',
-  textoSuave: '#64748B',
-  textoSuaveClaro: '#94A3B8',
+  texto: 'var(--nx-texto)',                // #1E293B
+  textoSuave: 'var(--nx-texto-suave)',     // #64748B
+  textoSuaveClaro: 'var(--nx-texto-suave-claro)', // #94A3B8
 
   // Semánticos
   exito: '#10B981',
-  exitoFondo: '#DCFCE7',
-  exitoTexto: '#166534',
+  exitoFondo: 'var(--nx-exito-fondo)',     // #DCFCE7
+  exitoTexto: 'var(--nx-exito-texto)',     // #166534
   advertencia: '#F59E0B',
-  advertenciaFondo: '#FEF3C7',
-  advertenciaTexto: '#92400E',
+  advertenciaFondo: 'var(--nx-advertencia-fondo)', // #FEF3C7
+  advertenciaTexto: 'var(--nx-advertencia-texto)', // #92400E
   error: '#EF4444',
-  errorFondo: '#FEE2E2',
-  errorTexto: '#991B1B'
+  errorFondo: 'var(--nx-error-fondo)',     // #FEE2E2
+  errorTexto: 'var(--nx-error-texto)',     // #991B1B
+
+  // Barra lateral
+  sidebar: 'var(--nx-sidebar)'
 }
 
 export const sombras = {

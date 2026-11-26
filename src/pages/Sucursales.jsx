@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FiPlus, FiX, FiEdit2, FiTrash2, FiCheckCircle, FiXCircle, FiHome, FiMapPin, FiPhone } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import { UbicacionActual } from '../components/EncabezadoPagina.jsx'
 import { obtenerMensajeError, MENSAJES } from '../services/mensajes.js'
 import { colores, sombras, radios, tarjeta, btnPrimario, btnGhost, estiloBadge, input } from '../styles/tokens.js'
 
@@ -198,13 +199,14 @@ function Sucursales() {
   const activas = sucursales.filter(s => s.activa).length
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
+    <div className="nexdine-shell" style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
       <Sidebar currentUser={currentUser} rutaActual="/sucursales" onLogout={handleLogout} />
 
-      <div style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
+      <div className="nexdine-main" style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
         {/* Encabezado */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
           <div>
+            <UbicacionActual />
             <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Sucursales</h2>
             <small style={{ color: colores.textoSuave }}>
               {sucursales.length > 0
@@ -216,11 +218,6 @@ function Sucursales() {
             <button className="btn" style={{ ...btnPrimario, minHeight: '44px' }} onClick={openCreateModal}>
               <FiPlus style={{ marginRight: '5px' }} /> Crear Sucursal
             </button>
-            <span className="text-muted">Hola, <strong>{currentUser.nombre}</strong></span>
-            <img
-              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=11362E&color=fff`}
-              className="rounded-circle" width="40" height="40" alt="Avatar"
-            />
           </div>
         </div>
 

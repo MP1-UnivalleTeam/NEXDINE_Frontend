@@ -287,7 +287,7 @@ function Carrito() {
             <section style={{
               ...tarjeta, minHeight: '200px', padding: '30px 20px', textAlign: 'center',
               display: 'flex', flexDirection: 'column', justifyContent: 'center',
-              background: `linear-gradient(135deg, ${colores.mint}66, ${colores.tarjeta} 58%)`
+              background: `linear-gradient(135deg, color-mix(in srgb, ${colores.mint} 40%, transparent), ${colores.tarjeta} 58%)`
             }}>
               <div style={{
                 width: '54px', height: '54px', margin: '0 auto 12px', borderRadius: '50%',

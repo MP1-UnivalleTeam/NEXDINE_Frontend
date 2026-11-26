@@ -23,7 +23,20 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment variables
+# Variables de entorno y secretos (nunca subir)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Compilación y despliegue
+build/
+.next/
+out/
+.vercel/
+coverage/
+
+# Temporales
+*.tmp
+*.bak

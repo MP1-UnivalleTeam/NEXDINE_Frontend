@@ -8,6 +8,8 @@ import SelectorTipoServicio, { TIPOS_SERVICIO } from '../components/SelectorTipo
 import SelectorSucursal from '../components/SelectorSucursal.jsx'
 import ModalPersonalizacion from '../components/ModalPersonalizacion.jsx'
 import Sugerencias from '../components/Sugerencias.jsx'
+import BotonTema from '../components/BotonTema.jsx'
+import { obtenerHorarios } from '../services/horarios.js'
 import { filtrarMenu, contarProductos } from '../utils/buscadorProductos.js'
 import {
   guardarContextoMenu,
@@ -53,6 +55,8 @@ function Menu() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sesionExpirada, setSesionExpirada] = useState(false)
+  // RF044: aviso cuando la sucursal está fuera de su horario de servicio.
+  const [horarioCerrado, setHorarioCerrado] = useState('')
   const [cargandoSesion, setCargandoSesion] = useState(true)
 
   // RF019 — Criterios de búsqueda
@@ -86,6 +90,19 @@ function Menu() {
     agregarItem, totalItems, subtotal, setSucursal, setTasaImpuesto, sucursal,
     setTipoServicio: setTipoServicioCarrito
   } = useCarrito()
+
+  // RF044: consulta el horario de la sucursal elegida y avisa si está cerrada.
+  useEffect(() => {
+    if (!sucursal?.id) {
+      setHorarioCerrado('')
+      return
+    }
+    let activo = true
+    obtenerHorarios(sucursal.id)
+      .then(datos => { if (activo) setHorarioCerrado(datos?.abiertoAhora === false ? (datos.mensaje || 'La sucursal está cerrada en este momento.') : '') })
+      .catch(() => { if (activo) setHorarioCerrado('') })
+    return () => { activo = false }
+  }, [sucursal?.id])
 
   useEffect(() => {
     if (esMenuPublico) {
@@ -622,6 +639,7 @@ function Menu() {
               </small>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <BotonTema conSesion={Boolean(usuario)} />
               {esCliente && (
                 <button
                   type="button"
@@ -630,6 +648,16 @@ function Menu() {
                   onClick={() => navigate('/favoritos')}
                 >
                   <FiHeart style={{ marginRight: '6px', color: colores.error }} /> Mis favoritos
+                </button>
+              )}
+              {esCliente && (
+                <button
+                  type="button"
+                  className="btn d-flex align-items-center"
+                  style={{ ...btnGhost, minHeight: '44px' }}
+                  onClick={() => navigate('/mis-pedidos')}
+                >
+                  <FiClock style={{ marginRight: '6px' }} /> Mis pedidos
                 </button>
               )}
               {codigoMesa && (
@@ -650,6 +678,16 @@ function Menu() {
               )}
             </div>
           </div>
+
+          {horarioCerrado && (
+            <div role="status" style={{
+              ...tarjeta, padding: '12px 16px', marginBottom: '16px',
+              backgroundColor: colores.advertenciaFondo, color: colores.advertenciaTexto,
+              border: 'none', fontSize: '13.5px', display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <FiClock style={{ flexShrink: 0 }} /> {horarioCerrado} Puedes ver la carta, pero no hacer pedidos por ahora.
+            </div>
+          )}
 
           {esCliente && errorFavorito && (
             <div role="alert" style={{

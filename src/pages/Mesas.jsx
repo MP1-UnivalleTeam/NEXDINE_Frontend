@@ -7,6 +7,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import { UbicacionActual } from '../components/EncabezadoPagina.jsx'
 import TarjetaPedido from '../components/TarjetaPedido.jsx'
 import ModalPedidoManual from '../components/ModalPedidoManual.jsx'
 import { usePedidosActivos } from '../hooks/usePedidosActivos.js'
@@ -334,12 +335,12 @@ function Mesas() {
 
   const pagoMesaSeleccionada = mesaSeleccionada ? pagosPorMesa[mesaSeleccionada.id] : null
 
-  const cambiarEstadoPedido = async (pedido, estado) => {
+  const cambiarEstadoPedido = async (pedido, estado, motivo) => {
     if (pedidoActualizando) return
     setPedidoActualizando(pedido.id)
     setErrorMessage('')
     try {
-      await actualizarEstadoPedido(pedido.id, estado)
+      await actualizarEstadoPedido(pedido.id, estado, motivo)
       const referencia = pedido.numeroSeguimiento || 'Pedido'
       setSuccessMessage(`${referencia} actualizado a ${etiquetaEstado(estado).toLowerCase()}.`)
       await recargarPedidos()
@@ -422,6 +423,7 @@ function Mesas() {
         {/* Encabezado */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
           <div>
+            <UbicacionActual />
             <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>
               {esAdmin ? 'Gestión de Mesas' : 'Mesas'}
             </h2>
@@ -450,11 +452,6 @@ function Mesas() {
                 </button>
               </>
             )}
-            <span className="text-muted">Hola, <strong>{currentUser.nombre}</strong></span>
-            <img
-              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=11362E&color=fff`}
-              className="rounded-circle" width="40" height="40" alt="Avatar"
-            />
           </div>
         </div>
 

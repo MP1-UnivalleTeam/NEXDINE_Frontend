@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { FiPlus } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import EncabezadoPagina from '../components/EncabezadoPagina.jsx'
 import { obtenerMensajeError, MENSAJES } from '../services/mensajes.js'
-import { colores, tarjeta } from '../styles/tokens.js'
+import { colores, tarjeta, btnPrimario } from '../styles/tokens.js'
 
 function Dashboard() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -29,10 +30,9 @@ function Dashboard() {
   const [successMessage, setSuccessMessage] = useState('')
   const [formError, setFormError] = useState('')
 
-  // Búsqueda por ID visual
-  const [searchId, setSearchId] = useState('')
-  const [filtroId, setFiltroId] = useState(null)
-  const [busquedaError, setBusquedaError] = useState('')
+  // Búsqueda en vivo por nombre, teléfono o dirección y filtro por rol
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroRol, setFiltroRol] = useState('TODOS')
 
   // Estado de operaciones para evitar dobles envíos
   const [creandoUsuario, setCreandoUsuario] = useState(false)
@@ -63,14 +63,17 @@ function Dashboard() {
     [users]
   )
 
-  const usuariosVisibles = useMemo(
-    () => (filtroId == null
-      ? usuariosConId
-      : usuariosConId.filter(user => user.idVisual === filtroId)),
-    [usuariosConId, filtroId]
-  )
+  const usuariosVisibles = useMemo(() => {
+    const texto = busqueda.trim().toLowerCase()
+    return usuariosConId.filter(user => {
+      if (filtroRol !== 'TODOS' && user.rol !== filtroRol) return false
+      if (!texto) return true
+      return [user.nombre, user.celular, user.direccion, user.correo]
+        .some(valor => String(valor || '').toLowerCase().includes(texto))
+    })
+  }, [usuariosConId, busqueda, filtroRol])
 
-  const busquedaSinResultados = filtroId != null && usuariosVisibles.length === 0
+  const hayFiltros = busqueda.trim() !== '' || filtroRol !== 'TODOS'
 
   useEffect(() => {
     checkAuth()
@@ -244,22 +247,9 @@ function Dashboard() {
     }
   }
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    const valor = Number(searchId)
-    if (!Number.isInteger(valor) || valor <= 0) {
-      setBusquedaError('Ingresa un ID numérico válido.')
-      setFiltroId(null)
-      return
-    }
-    setBusquedaError('')
-    setFiltroId(valor)
-  }
-
   const limpiarBusqueda = () => {
-    setSearchId('')
-    setFiltroId(null)
-    setBusquedaError('')
+    setBusqueda('')
+    setFiltroRol('TODOS')
   }
 
   const handleEdit = (user) => {
@@ -388,133 +378,70 @@ function Dashboard() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden' }}>
+    <div className="nexdine-shell" style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden' }}>
       {/* Sidebar compartido */}
       <Sidebar currentUser={currentUser} rutaActual="/dashboard" onLogout={handleLogout} />
 
       {/* Main Content */}
-      <div style={{ marginLeft: '260px', flex: 1, padding: '30px' }}>
+      <div className="nexdine-main" style={{ marginLeft: '260px', flex: 1, padding: '30px' }}>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-          <h2>{currentUser.rol === 'CLIENTE' ? 'Menú del Restaurante' : 'Gestión de Usuarios'}</h2>
+        <EncabezadoPagina
+          descripcion="Personal del restaurante y cuentas de clientes"
+          acciones={isAdmin() && (
+            <button type="button" className="btn" onClick={openCreateUserModal} style={{ ...btnPrimario, minHeight: '44px' }}>
+              <FiPlus style={{ marginRight: '6px' }} aria-hidden="true" /> Registrar usuario
+            </button>
+          )}
+        />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <span className="text-muted">Hola, <strong>{currentUser.nombre}</strong></span>
-            <img
-              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=11362E&color=fff`}
-              className="rounded-circle"
-              width="40"
-              height="40"
-              alt="Avatar"
-            />
-          </div>
-        </div>
-
-        {/* VISTA CLIENTE */}
-        {currentUser.rol === 'CLIENTE' && (
-          <div className="row">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="col-md-3 mb-3">
-                <div className="card p-3 text-center" style={tarjeta}>
-                  <img src="https://via.placeholder.com/150" className="mb-2 rounded" alt="Producto" />
-                  <h5>Hamburguesa</h5>
-                  <p className="text-muted">$28.900</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* VISTA ADMIN/EMPLEADO */}
         {currentUser.rol !== 'CLIENTE' && (
           <>
-            {/* Botón Crear Usuario (Solo Admin) */}
-            {isAdmin() && (
-              <div className="d-flex justify-content-between align-items-center mb-4">
-                <h4 className="mb-0">Gestión de Usuarios</h4>
-                <button
-                  className="btn btn-sm"
-                  style={{ backgroundColor: colores.primario, color: 'white' }}
-                  onClick={openCreateUserModal}
-                >
-                  <FiPlus style={{ marginRight: '5px' }} /> Registrar usuario
-                </button>
-              </div>
-            )}
-
             {successMessage && (
-              <div className="alert alert-success py-2 small" role="alert">
+              <div className="alert alert-success py-2 small" role="status">
                 <i className="fa-solid fa-circle-check me-1"></i>{successMessage}
               </div>
             )}
 
-            {/* Buscar Usuario */}
-            {isAdmin() && (
-              <div className="card p-3 mb-4" style={tarjeta}>
-                <h5 className="mb-3">
-                  <i className="fa-solid fa-magnifying-glass me-2"></i>
-                  Buscar Usuario
-                </h5>
-                <form onSubmit={handleSearch}>
-                  <div className="row g-2 align-items-end">
-                    <div className="col-md-8">
-                      <label className="form-label small fw-semibold" htmlFor="buscar-usuario-id">ID del usuario</label>
-                      <input
-                        id="buscar-usuario-id"
-                        type="number"
-                        min="1"
-                        step="1"
-                        className="form-control form-control-sm"
-                        placeholder="[ Ej: 1 ]"
-                        required
-                        value={searchId}
-                        onChange={(e) => { setSearchId(e.target.value); setBusquedaError('') }}
-                      />
-                    </div>
-                    <div className="col-md-2">
-                      <button type="submit" className="btn btn-sm w-100" style={{ backgroundColor: colores.primario, color: 'white' }}>
-                        <i className="fa-solid fa-search me-1"></i>Buscar
-                      </button>
-                    </div>
-                    <div className="col-md-2">
-                      <button type="button" className="btn btn-sm btn-outline-secondary w-100" onClick={limpiarBusqueda}>
-                        Limpiar
-                      </button>
-                    </div>
-                  </div>
-                  {busquedaError && (
-                    <div className="text-danger small mt-2" role="alert">{busquedaError}</div>
-                  )}
-                </form>
+            {/* Búsqueda en vivo y filtro por rol */}
+            <div style={{ ...tarjeta, padding: '14px 16px', marginBottom: '14px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ position: 'relative', flex: '1 1 260px' }}>
+                <i className="fa-solid fa-magnifying-glass" aria-hidden="true" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colores.textoSuaveClaro }}></i>
+                <label htmlFor="buscar-usuario" className="visually-hidden">Buscar usuario</label>
+                <input
+                  id="buscar-usuario"
+                  type="search"
+                  className="form-control"
+                  placeholder="Buscar por nombre, teléfono o dirección"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  style={{ paddingLeft: '34px', minHeight: '42px' }}
+                />
               </div>
-            )}
-
-            {/* Estado de la búsqueda */}
-            {filtroId != null && (
-              <div className="card p-3 mb-3" style={tarjeta}>
-                {busquedaSinResultados ? (
-                  <div className="alert alert-warning py-2 small mb-0 d-flex justify-content-between align-items-center gap-2 flex-wrap" role="status">
-                    <span><i className="fa-solid fa-circle-info me-1"></i>No existe un usuario con el ID {filtroId}.</span>
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={limpiarBusqueda}>
-                      Ver todos
+              <div role="group" aria-label="Filtrar por rol" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {['TODOS', 'ADMINISTRADOR', 'MESERO', 'COCINERO', 'CLIENTE'].map(rol => {
+                  const activo = filtroRol === rol
+                  const cantidad = rol === 'TODOS' ? users.length : users.filter(u => u.rol === rol).length
+                  return (
+                    <button key={rol} type="button" aria-pressed={activo} onClick={() => setFiltroRol(rol)} style={{
+                      minHeight: '36px', padding: '0 12px', borderRadius: '9999px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                      border: `1px solid ${activo ? colores.primario : colores.borde}`,
+                      backgroundColor: activo ? colores.primario : colores.tarjeta, color: activo ? '#fff' : colores.texto
+                    }}>
+                      {{ TODOS: 'Todos', ADMINISTRADOR: 'Administradores', MESERO: 'Meseros', COCINERO: 'Cocina', CLIENTE: 'Clientes' }[rol]} ({cantidad})
                     </button>
-                  </div>
-                ) : (
-                  <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-                    <span className="small text-muted">
-                      <i className="fa-solid fa-filter me-1"></i>Mostrando el usuario con ID {filtroId}.
-                    </span>
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={limpiarBusqueda}>
-                      Limpiar búsqueda
-                    </button>
-                  </div>
-                )}
+                  )
+                })}
               </div>
-            )}
+              {hayFiltros && (
+                <button type="button" className="btn btn-sm btn-link" onClick={limpiarBusqueda} style={{ color: colores.primario }}>
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
 
             {/* Tabla de Usuarios */}
-            <div className="card p-4" style={tarjeta}>
-              <table className="table table-hover align-middle">
+            <div className="card p-4" style={{ ...tarjeta, overflowX: 'auto' }}>
+              <table className="table table-hover align-middle" style={{ minWidth: '760px' }}>
                 <thead className="text-muted">
                   <tr>
                     <th>ID</th>
@@ -531,7 +458,7 @@ function Dashboard() {
                   {usuariosVisibles.length === 0 && (
                     <tr>
                       <td colSpan={isAdmin() ? 8 : 7} className="text-center text-muted py-4">
-                        No hay usuarios para mostrar.
+                        {hayFiltros ? 'Ningún usuario coincide con la búsqueda.' : 'No hay usuarios para mostrar.'}
                       </td>
                     </tr>
                   )}

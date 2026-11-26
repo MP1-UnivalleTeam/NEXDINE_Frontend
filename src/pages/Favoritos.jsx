@@ -5,6 +5,7 @@ import {
 } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import { UbicacionActual } from '../components/EncabezadoPagina.jsx'
 import ModalPersonalizacion from '../components/ModalPersonalizacion.jsx'
 import { listarFavoritos, eliminarFavorito } from '../services/favoritos.js'
 import { useCarrito } from '../context/CarritoContext.jsx'
@@ -121,6 +122,7 @@ function Favoritos() {
           flexWrap: 'wrap', gap: '12px', marginBottom: '20px'
         }}>
           <div>
+            <UbicacionActual />
             <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>
               Mis favoritos
               <span style={{ ...estiloBadge(colores.mint, colores.secundario), marginLeft: '10px', verticalAlign: 'middle' }}>

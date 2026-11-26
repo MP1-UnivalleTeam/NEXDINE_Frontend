@@ -1,245 +1,171 @@
 /**
- * Sidebar compartido de las vistas administrativas.
+ * Menú lateral compartido por todas las vistas con sesión.
  *
- * Centraliza las condiciones de permisos para que el menú lateral sea
- * idéntico en Dashboard, Productos y Mesas, independientemente de la ruta.
- *
- * Permisos:
- *   · ADMINISTRADOR / SUPERADMIN → Usuarios, Productos, Mesas, Pedidos, Reportes
- *   · MESERO                    → Mesas, Pedidos
- *   · COCINERO                  → Pedidos
- *   · CLIENTE                   → Ver Menú, Mis Favoritos
- *
- * Visual: guía "Forest Culinary Precision" (DESIGN.md) — fondo verde bosque
- * #11362E, elemento activo con píldora clara y borde de resalte.
+ * Las opciones salen de config/navegacion.js: cada rol ve solo los módulos
+ * de su trabajo, agrupados por tarea. El elemento activo se calcula con la
+ * URL, así que siempre coincide con la pantalla abierta. En pantallas
+ * pequeñas se convierte en una barra superior con menú desplegable.
  */
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
+import { FiMenu, FiX, FiLogOut, FiInfo } from 'react-icons/fi'
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
-import { colores } from '../styles/tokens.js'
+import { sincronizarConPerfil } from '../utils/tema.js'
+import { menuParaRol, ubicarRuta, ETIQUETAS_ROL, MODULOS } from '../config/navegacion.js'
+import { CLAVE_AVISO } from './RutaProtegida.jsx'
+import { colores, radios, sombras } from '../styles/tokens.js'
 import AvisosRecordatorios from './AvisosRecordatorios.jsx'
-
-const LINK_BASE = {
-  color: 'rgba(255,255,255,0.78)',
-  padding: '12px 20px',
-  margin: '4px 12px',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '12px',
-  borderRadius: '8px',
-  textDecoration: 'none',
-  fontSize: '14px'
-}
-
-const LINK_ACTIVO = {
-  ...LINK_BASE,
-  backgroundColor: 'rgba(255,255,255,0.12)',
-  color: '#FFFFFF',
-  fontWeight: 600
-}
+import Avatar from './Avatar.jsx'
+import BotonTema from './BotonTema.jsx'
 
 function Sidebar({ currentUser, rutaActual, onLogout }) {
-  const navigate = useNavigate()
+  const ubicacion = useLocation()
+  const [abierto, setAbierto] = useState(false)
+  const [aviso, setAviso] = useState('')
+  const ruta = ubicacion.pathname || rutaActual
+
+  // RF026 / RF029: aplica el tema y el color de acento guardados en el perfil.
+  useEffect(() => {
+    sincronizarConPerfil(currentUser)
+  }, [currentUser?.id, currentUser?.tema, currentUser?.colorAcento])
+
+  // Título de la pestaña del navegador acorde con la pantalla abierta.
+  useEffect(() => {
+    const modulo = ubicarRuta(ruta)?.modulo
+    document.title = modulo ? `${modulo.etiqueta} · NexDine` : 'NexDine'
+  }, [ruta])
+
+  // Aviso que deja RutaProtegida cuando se intenta abrir un módulo sin permiso.
+  useEffect(() => {
+    try {
+      const texto = sessionStorage.getItem(CLAVE_AVISO)
+      if (texto) {
+        setAviso(texto)
+        sessionStorage.removeItem(CLAVE_AVISO)
+        const t = setTimeout(() => setAviso(''), 6000)
+        return () => clearTimeout(t)
+      }
+    } catch {
+      // Sin almacenamiento.
+    }
+    return undefined
+  }, [ruta])
+
+  useEffect(() => { setAbierto(false) }, [ruta])
+
+  useEffect(() => {
+    if (!abierto) return undefined
+    const escape = (e) => { if (e.key === 'Escape') setAbierto(false) }
+    window.addEventListener('keydown', escape)
+    return () => window.removeEventListener('keydown', escape)
+  }, [abierto])
 
   if (!currentUser) return null
 
+  const secciones = menuParaRol(currentUser.rol)
   const esAdmin = currentUser.rol === 'ADMINISTRADOR' || currentUser.rol === 'SUPERADMIN'
-  const esSuperadmin = currentUser.rol === 'SUPERADMIN'
-  const esCliente = currentUser.rol === 'CLIENTE'
-  const esMesero = currentUser.rol === 'MESERO'
-  const esCocinero = currentUser.rol === 'COCINERO'
+  const contextoGuardado = obtenerContextoMenu()
+  const rutaMenuCliente = contextoGuardado && !contextoGuardado.includes('mesa=null') ? contextoGuardado : MODULOS.menu.ruta
+  const moduloActual = ubicarRuta(ruta)?.modulo
 
-  const etiquetasRol = {
-    SUPERADMIN: 'Admin General',
-    ADMINISTRADOR: 'Administrador',
-    MESERO: 'Mesero',
-    COCINERO: 'Cocinero',
-    CLIENTE: 'Cliente'
+  const enlace = (item) => {
+    const activo = ruta === item.ruta
+    const href = item.clave === 'menu' ? rutaMenuCliente : item.ruta
+    return (
+      <li key={item.clave}>
+        <a
+          href={href}
+          className={`nexdine-enlace${activo ? ' activo' : ''}`}
+          aria-current={activo ? 'page' : undefined}
+          title={item.descripcion}
+        >
+          <i className={`fa-solid ${item.icono}`} aria-hidden="true"></i>
+          <span>{item.etiqueta}</span>
+        </a>
+      </li>
+    )
   }
 
-  const estilo = (ruta) => (rutaActual === ruta ? LINK_ACTIVO : LINK_BASE)
-  const contextoGuardado = obtenerContextoMenu()
-  const rutaMenu = contextoGuardado && !contextoGuardado.includes('mesa=null')
-    ? contextoGuardado
-    : null
-
   return (
-    <div className="nexdine-sidebar" style={{
-      width: '260px',
-      backgroundColor: colores.primario,
-      color: 'white',
-      position: 'fixed',
-      height: '100%',
-      paddingTop: '20px',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      <div style={{ padding: '0 20px 24px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{
-          fontSize: '1.35rem',
-          fontWeight: 700,
-          letterSpacing: '1px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
+    <>
+      {/* Barra superior: solo en pantallas pequeñas */}
+      <header className="nexdine-topbar" style={{ backgroundColor: colores.sidebar }}>
+        <button type="button" className="nexdine-topbar-boton" aria-label="Abrir menú" aria-expanded={abierto} aria-controls="nexdine-menu" onClick={() => setAbierto(true)}>
+          <FiMenu size={22} />
+        </button>
+        <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {moduloActual?.etiqueta || 'NexDine'}
+        </div>
+        <a href="/perfil" aria-label="Mi perfil"><Avatar usuario={currentUser} tamano={32} /></a>
+      </header>
+
+      {abierto && <div className="nexdine-velo" onClick={() => setAbierto(false)} aria-hidden="true" />}
+
+      <nav
+        id="nexdine-menu"
+        className={`nexdine-sidebar${abierto ? ' abierto' : ''}`}
+        aria-label="Menú principal"
+        style={{ backgroundColor: colores.sidebar }}
+      >
+        <div className="nexdine-marca">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.3rem', fontWeight: 700, letterSpacing: '1px' }}>
+            <i className="fa-solid fa-utensils" style={{ color: colores.exito }} aria-hidden="true"></i> NEXDINE
+          </div>
+          <button type="button" className="nexdine-cerrar-menu" aria-label="Cerrar menú" onClick={() => setAbierto(false)}>
+            <FiX size={20} />
+          </button>
+        </div>
+
+        <div className="nexdine-secciones">
+          {secciones.map((seccion, i) => (
+            <div key={seccion.titulo || `s${i}`} className="nexdine-seccion">
+              {seccion.titulo && <div className="nexdine-seccion-titulo" id={`sec-${i}`}>{seccion.titulo}</div>}
+              <ul aria-labelledby={seccion.titulo ? `sec-${i}` : undefined}>
+                {seccion.items.map(enlace)}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="nexdine-usuario">
+          <a href="/perfil" className={`nexdine-tarjeta-usuario${ruta === '/perfil' ? ' activo' : ''}`} title="Mi perfil: foto, tema y datos" aria-current={ruta === '/perfil' ? 'page' : undefined}>
+            <Avatar usuario={currentUser} tamano={36} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {currentUser.nombre}
+              </div>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.65)' }}>
+                {ETIQUETAS_ROL[currentUser.rol] || 'Usuario'} · Mi perfil
+              </div>
+            </div>
+          </a>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <BotonTema conSesion variante="oscura" />
+            <button type="button" className="nexdine-salir" onClick={() => { if (onLogout) onLogout() }}>
+              <FiLogOut aria-hidden="true" /> Cerrar sesión
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {aviso && (
+        <div role="status" style={{
+          position: 'fixed', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1100,
+          maxWidth: 'calc(100% - 32px)', width: '440px', backgroundColor: colores.tarjeta, color: colores.texto,
+          borderLeft: `4px solid ${colores.advertencia}`, borderRadius: radios.md, boxShadow: sombras.nivel3,
+          padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '13.5px'
         }}>
-          <i className="fa-solid fa-utensils" style={{ color: colores.exito }}></i> NEXDINE
+          <FiInfo style={{ color: colores.advertencia, flexShrink: 0, marginTop: '2px' }} aria-hidden="true" />
+          <span style={{ flex: 1 }}>{aviso}</span>
+          <button type="button" aria-label="Cerrar aviso" onClick={() => setAviso('')} style={{ border: 'none', background: 'transparent', color: colores.textoSuave, cursor: 'pointer', padding: 0 }}>
+            <FiX />
+          </button>
         </div>
-        <small style={{ color: 'rgba(255,255,255,0.55)', display: 'block', marginTop: '2px' }}>
-          POS &amp; Backoffice
-        </small>
-      </div>
-
-      <ul className="nav flex-column mt-2" style={{ flex: 1 }}>
-        {esCliente && (
-          <>
-            <li className="nav-item">
-              {rutaMenu ? (
-                <a href={rutaMenu} className="nav-link" style={estilo('/menu')}>
-                  <i className="fa-solid fa-utensils"></i> Ver Menú
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  className="nav-link"
-                  onClick={() => navigate('/menu')}
-                  style={{
-                    ...LINK_BASE,
-                    width: '100%',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <i className="fa-solid fa-utensils"></i> Ver Menú
-                </button>
-              )}
-            </li>
-            <li className="nav-item">
-              <a href="/favoritos" className="nav-link" style={estilo('/favoritos')}>
-                <i className="fa-solid fa-heart"></i> Mis Favoritos
-              </a>
-            </li>
-          </>
-        )}
-
-        {esMesero && (
-          <>
-            <li className="nav-item">
-              <a href="/mesas" className="nav-link" style={estilo('/mesas')}>
-                <i className="fa-solid fa-chair"></i> Mesas
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="/pedidos" className="nav-link" style={estilo('/pedidos')}>
-                <i className="fa-solid fa-receipt"></i> Pedidos
-              </a>
-            </li>
-          </>
-        )}
-
-        {esCocinero && (
-          <li className="nav-item">
-            <a href="/pedidos" className="nav-link" style={estilo('/pedidos')}>
-              <i className="fa-solid fa-receipt"></i> Pedidos
-            </a>
-          </li>
-        )}
-
-        {esAdmin && (
-          <>
-            <li className="nav-item">
-              <a href="/dashboard" className="nav-link" style={estilo('/dashboard')}>
-                <i className="fa-solid fa-users"></i> Usuarios
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="/productos" className="nav-link" style={estilo('/productos')}>
-                <i className="fa-solid fa-utensils"></i> Productos
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="/mesas" className="nav-link" style={estilo('/mesas')}>
-                <i className="fa-solid fa-chair"></i> Mesas
-              </a>
-            </li>
-            {esSuperadmin && (
-              <li className="nav-item">
-                <a href="/sucursales" className="nav-link" style={estilo('/sucursales')}>
-                  <i className="fa-solid fa-store"></i> Sucursales
-                </a>
-              </li>
-            )}
-            {esSuperadmin && (
-              <li className="nav-item">
-                <a href="/impuestos" className="nav-link" style={estilo('/impuestos')}>
-                  <i className="fa-solid fa-percent"></i> Impuestos
-                </a>
-              </li>
-            )}
-            <li className="nav-item">
-              <a href="/pedidos" className="nav-link" style={estilo('/pedidos')}>
-                <i className="fa-solid fa-receipt"></i> Pedidos
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="/reportes" className="nav-link" style={estilo('/reportes')}>
-                <i className="fa-solid fa-chart-line"></i> Reportes
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="/recordatorios" className="nav-link" style={estilo('/recordatorios')}>
-                <i className="fa-solid fa-bell"></i> Recordatorios
-              </a>
-            </li>
-          </>
-        )}
-      </ul>
-
-      <div style={{
-        margin: '0 12px 12px 12px',
-        padding: '12px',
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: '12px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px'
-      }}>
-        <img
-          src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=10B981&color=11362E`}
-          className="rounded-circle" width="36" height="36" alt="Avatar"
-        />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {currentUser.nombre}
-          </div>
-          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
-            {etiquetasRol[currentUser.rol] || 'Usuario'}
-          </div>
-        </div>
-        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: colores.exito, flexShrink: 0 }}></span>
-      </div>
-
-      <div style={{ padding: '0 20px 20px 20px' }}>
-        <a
-          href="/login"
-          onClick={(e) => { e.preventDefault(); if (onLogout) onLogout() }}
-          className="text-white text-decoration-none"
-          style={{
-            fontSize: '14px',
-            color: 'rgba(255,255,255,0.78) !important',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}
-        >
-          <i className="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
-        </a>
-      </div>
+      )}
 
       {/* Avisos de recordatorios programados (solo personal administrativo) */}
       {esAdmin && <AvisosRecordatorios />}
-    </div>
+    </>
   )
 }
 

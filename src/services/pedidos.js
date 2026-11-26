@@ -14,6 +14,8 @@ export async function crearPedidoInvitado(datos) {
   if (datos.direccion) params.append('direccion', datos.direccion)
   if (datos.referencia) params.append('referencia', datos.referencia)
   if (datos.sucursalId) params.append('sucursalId', datos.sucursalId)
+  // RF016: correo opcional para recibir los cambios de estado.
+  if (datos.correo) params.append('correo', datos.correo)
 
   const response = await api.post('/api/pedidos/invitado', params)
   return response.data
@@ -83,11 +85,27 @@ export async function registrarPedidoManual(datos) {
   return response.data
 }
 
-export async function actualizarEstadoPedido(pedidoId, estado) {
+export async function actualizarEstadoPedido(pedidoId, estado, motivo) {
+  // RF009 + RF033: la cancelación va por su propio endpoint y exige motivo.
+  if (estado === 'CANCELADO') return cancelarPedido(pedidoId, motivo)
   const response = await api.put(`/api/pedidos/${pedidoId}/estado`, null, {
     params: { estado }
   })
   return response.data
+}
+
+/** Cancela un pedido (personal o el propio cliente) indicando el motivo. */
+export async function cancelarPedido(pedidoId, motivo) {
+  const response = await api.post(`/api/pedidos/${pedidoId}/cancelar`, null, {
+    params: { motivo }
+  })
+  return response.data
+}
+
+/** RF010: historial de pedidos del cliente que inició sesión. */
+export async function listarMisPedidos() {
+  const response = await api.get('/api/pedidos/mis-pedidos')
+  return Array.isArray(response.data) ? response.data : []
 }
 
 export async function obtenerMenuPorMesa(codigoMesa) {

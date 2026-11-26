@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../services/api.js'
 import { obtenerMensajeError } from '../services/mensajes.js'
+import { rutaInicio } from '../config/navegacion.js'
 import { colores, sombras, radios, btnPrimario } from '../styles/tokens.js'
 
 function Login() {
@@ -12,12 +13,6 @@ function Login() {
   const [verificandoSesion, setVerificandoSesion] = useState(true)
   const navigate = useNavigate()
 
-  const rutaInicio = (rol) => {
-    if (rol === 'CLIENTE') return '/favoritos'
-    if (rol === 'MESERO') return '/mesas'
-    if (rol === 'COCINERO') return '/pedidos'
-    return '/dashboard'
-  }
 
   useEffect(() => {
     let cancelado = false

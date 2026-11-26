@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FiCheckCircle, FiClock, FiCreditCard, FiXCircle, FiUser, FiPhone, FiMapPin, FiHash, FiFileText } from 'react-icons/fi'
 import ModalFactura from './ModalFactura.jsx'
+import ModalCancelarPedido from './ModalCancelarPedido.jsx'
 import { colores, tarjeta, radios, btnPrimario, btnGhost, estiloBadge, cifrasTabulares } from '../styles/tokens.js'
 import { formatearDinero } from '../utils/dinero.js'
 import EstadoPagoBadge from './EstadoPagoBadge.jsx'
@@ -27,6 +28,7 @@ function TarjetaPedido({
   permitirFactura
 }) {
   const [modalFactura, setModalFactura] = useState(false)
+  const [modalCancelar, setModalCancelar] = useState(false)
   if (!pedido) return null
 
   const estado = infoEstado(pedido.estado)
@@ -42,11 +44,13 @@ function TarjetaPedido({
   // La factura se habilita cuando el pedido está listo (o ya entregado).
   const puedeFacturar = (permitirFactura ?? permitirAcciones)
     && (estadoClave === 'LISTO' || estadoClave === 'ENTREGADO')
+  // RF009: solo se cancela antes de pasar a preparación.
+  const cancelable = pedido.cancelable ?? (estadoClave === 'PENDIENTE' || estadoClave === 'CONFIRMADO')
 
   const cambiar = (nuevoEstado) => {
     if (actualizando || !onCambiarEstado) return
-    if (nuevoEstado === 'CANCELADO'
-      && !window.confirm('¿Cancelar este pedido? Esta acción no se puede deshacer.')) {
+    if (nuevoEstado === 'CANCELADO') {
+      setModalCancelar(true)
       return
     }
     onCambiarEstado(pedido, nuevoEstado)
@@ -202,7 +206,13 @@ function TarjetaPedido({
         </button>
       )}
 
-      {permitirAcciones && !finalizado && (siguiente || permitirCancelar) && (
+      {cancelado && pedido.motivoCancelacion && (
+        <small style={{ color: colores.errorTexto, display: 'block', marginTop: '10px' }}>
+          Motivo de anulación: {pedido.motivoCancelacion}
+        </small>
+      )}
+
+      {permitirAcciones && !finalizado && (siguiente || (permitirCancelar && cancelable)) && (
         <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
           {siguiente && (
             <button
@@ -216,7 +226,7 @@ function TarjetaPedido({
               {actualizando ? 'Actualizando…' : `Pasar a ${infoEstado(siguiente).etiqueta.toLowerCase()}`}
             </button>
           )}
-          {permitirCancelar && (
+          {permitirCancelar && cancelable && (
             <button
               type="button"
               className="btn"
@@ -237,6 +247,17 @@ function TarjetaPedido({
       )}
       {modalFactura && (
         <ModalFactura pedido={pedido} onCerrar={() => setModalFactura(false)} />
+      )}
+      {modalCancelar && (
+        <ModalCancelarPedido
+          pedido={pedido}
+          pagado={pagado || String(pedido.pagoEstado).toUpperCase() === 'PARCIAL'}
+          onCerrar={() => setModalCancelar(false)}
+          onConfirmar={async (motivo) => {
+            setModalCancelar(false)
+            await onCambiarEstado(pedido, 'CANCELADO', motivo)
+          }}
+        />
       )}
     </article>
   )

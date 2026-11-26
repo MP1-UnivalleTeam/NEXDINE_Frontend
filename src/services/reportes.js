@@ -76,6 +76,14 @@ export function describirRango(periodo, { desde, hasta }) {
   return `${desde.toLocaleDateString('es-CO', largo)} – ${hasta.toLocaleDateString('es-CO', largo)}`
 }
 
+/** RF017 / RF042: totales diarios que el servidor registra automáticamente. */
+export async function obtenerRegistroDiario({ desde, hasta, sucursalId }) {
+  const params = { desde: aFechaISO(desde), hasta: aFechaISO(hasta) }
+  if (sucursalId) params.sucursalId = sucursalId
+  const response = await api.get('/api/reportes/diario', { params })
+  return Array.isArray(response.data) ? response.data : []
+}
+
 export async function obtenerReporteVentas({ periodo, desde, hasta, sucursalId }) {
   const params = { periodo, desde: aFechaISO(desde), hasta: aFechaISO(hasta) }
   if (sucursalId) params.sucursalId = sucursalId

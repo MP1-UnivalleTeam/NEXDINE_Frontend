@@ -1,29 +1,65 @@
 import { useEffect, useState } from 'react'
 import { FiBell, FiX } from 'react-icons/fi'
-import { leerRecordatoriosLocales, recordatoriosPendientes, marcarEjecutados } from '../services/recordatorios.js'
+import { leerRecordatoriosLocales, recordatoriosPendientes, marcarEjecutados, obtenerAvisosServidor } from '../services/recordatorios.js'
 import { colores, radios, sombras } from '../styles/tokens.js'
 
 const INTERVALO_MS = 30000
 
+const CLAVE_VISTOS = 'nexdine.recordatorios.vistos'
+
+function leerVistos() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(CLAVE_VISTOS) || '[]'))
+  } catch {
+    return new Set()
+  }
+}
+
+function guardarVistos(vistos) {
+  try {
+    sessionStorage.setItem(CLAVE_VISTOS, JSON.stringify([...vistos].slice(-50)))
+  } catch {
+    // Sin almacenamiento: puede repetirse un aviso al recargar.
+  }
+}
+
 /**
- * Dispara en pantalla los recordatorios guardados en este navegador.
- * Se monta junto al Sidebar, así funciona en cualquier vista administrativa.
- * Cuando el backend tenga su programador, este componente deja de ser necesario
- * para los recordatorios del servidor (que llegarán como notificación/correo).
+ * Muestra en pantalla los recordatorios que disparó el servidor (RF027) y,
+ * si quedan, los guardados solo en este navegador. Se monta junto al
+ * Sidebar, así funciona en cualquier vista administrativa.
  */
 function AvisosRecordatorios() {
   const [avisos, setAvisos] = useState([])
 
   useEffect(() => {
-    const revisar = () => {
-      const pendientes = recordatoriosPendientes(leerRecordatoriosLocales())
-      if (pendientes.length === 0) return
-      marcarEjecutados(pendientes.map(r => r.id))
-      setAvisos(prev => [...prev, ...pendientes.map(r => ({ id: `${r.id}-${Date.now()}`, titulo: r.titulo, mensaje: r.mensaje }))].slice(-4))
+    let desdeServidor = null
+    const vistos = leerVistos()
+
+    const mostrar = (lista) => {
+      if (lista.length === 0) return
+      setAvisos(prev => [...prev, ...lista.map(r => ({ id: `${r.id}-${Date.now()}`, titulo: r.titulo, mensaje: r.mensaje }))].slice(-4))
       if ('Notification' in window && Notification.permission === 'granted') {
-        pendientes.forEach(r => {
+        lista.forEach(r => {
           try { new Notification(`Recordatorio: ${r.titulo}`, { body: r.mensaje || '', tag: `recordatorio-${r.id}` }) } catch { /* sin soporte */ }
         })
+      }
+    }
+
+    const revisar = async () => {
+      const locales = recordatoriosPendientes(leerRecordatoriosLocales())
+      if (locales.length > 0) {
+        marcarEjecutados(locales.map(r => r.id))
+        mostrar(locales)
+      }
+      try {
+        const { avisos: delServidor, ahora } = await obtenerAvisosServidor(desdeServidor)
+        desdeServidor = ahora
+        const nuevos = delServidor.filter(r => !vistos.has(`${r.id}|${r.ultimaEjecucion}`))
+        nuevos.forEach(r => vistos.add(`${r.id}|${r.ultimaEjecucion}`))
+        guardarVistos(vistos)
+        mostrar(nuevos)
+      } catch {
+        // Servidor sin el servicio o sin conexión: solo quedan los locales.
       }
     }
     revisar()

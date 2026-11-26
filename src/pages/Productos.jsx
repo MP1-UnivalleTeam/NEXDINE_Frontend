@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FiPlus, FiEdit2, FiX, FiTrash2, FiCamera, FiUploadCloud, FiCheckCircle, FiXCircle, FiAlertTriangle } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import { UbicacionActual } from '../components/EncabezadoPagina.jsx'
 import CargadorImagen from '../components/CargadorImagen.jsx'
 import GestionCupones from '../components/GestionCupones.jsx'
 import MoneyInput from '../components/MoneyInput.jsx'
@@ -583,15 +584,16 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
   const esAdmin = !esSuperadmin()
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
+    <div className="nexdine-shell" style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
       {/* Sidebar compartido */}
       <Sidebar currentUser={currentUser} rutaActual="/productos" onLogout={handleLogout} />
 
       {/* Main Content */}
-      <div style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
+      <div className="nexdine-main" style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
           <div>
+            <UbicacionActual />
             <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Productos</h2>
             <small style={{ color: colores.textoSuave }}>
               Catálogo global del restaurante y disponibilidad por sucursal
@@ -610,14 +612,6 @@ const CREAR_CATEGORIA = '__nueva_categoria__'
                 Sucursal: {miSucursal.nombre}
               </span>
             )}
-            <span className="text-muted">Hola, <strong>{currentUser.nombre}</strong></span>
-            <img
-              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=11362E&color=fff`}
-              className="rounded-circle"
-              width="40"
-              height="40"
-              alt="Avatar"
-            />
           </div>
         </div>
 

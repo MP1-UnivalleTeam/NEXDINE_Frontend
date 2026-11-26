@@ -2,17 +2,16 @@ import api from './api.js'
 import { esEndpointNoDisponible } from '../utils/exportar.js'
 
 /**
- * Recordatorios automáticos.
+ * Recordatorios automáticos (RF027).
  *
- * PENDIENTE BACKEND:
  *   GET    /api/recordatorios
+ *   GET    /api/recordatorios/avisos?desde=   → avisos que disparó el servidor
  *   POST   /api/recordatorios
  *   PUT    /api/recordatorios/{id}
  *   DELETE /api/recordatorios/{id}
- *   + un programador (scheduler) que dispare los recordatorios y envíe correos.
  *
- * Mientras no existan, los recordatorios se guardan en este navegador y solo
- * se disparan como aviso en pantalla cuando la aplicación está abierta.
+ * El servidor los dispara a la hora programada y envía los correos. Si el
+ * backend no responde, se guardan en este navegador como respaldo.
  */
 
 const CLAVE = 'nexdine.recordatorios'
@@ -222,4 +221,13 @@ export function leerRecordatoriosLocales() {
 export function marcarEjecutados(ids, momento = new Date()) {
   const marca = momento.toISOString()
   escribirLocal(leerLocal().map(r => (ids.includes(r.id) ? { ...r, ultimaEjecucion: marca } : r)))
+}
+
+/** Avisos del canal APP que el servidor disparó desde `desde` (hora del servidor). */
+export async function obtenerAvisosServidor(desde) {
+  const response = await api.get('/api/recordatorios/avisos', { params: desde ? { desde } : {} })
+  return {
+    avisos: Array.isArray(response.data?.avisos) ? response.data.avisos : [],
+    ahora: response.data?.ahora || null
+  }
 }

@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import { UbicacionActual } from '../components/EncabezadoPagina.jsx'
 import TarjetaPedido from '../components/TarjetaPedido.jsx'
 import ModalPago from '../components/ModalPago.jsx'
 import { usePedidosActivos } from '../hooks/usePedidosActivos.js'
@@ -112,12 +113,12 @@ function Domicilios() {
     cargarNotificaciones()
   }
 
-  const cambiarEstado = async (pedido, estado) => {
+  const cambiarEstado = async (pedido, estado, motivo) => {
     if (actualizando) return
     setActualizando(pedido.id)
     setErrorAccion('')
     try {
-      await actualizarEstadoPedido(pedido.id, estado)
+      await actualizarEstadoPedido(pedido.id, estado, motivo)
       setSuccessMessage(`${pedido.numeroSeguimiento || 'Pedido'} actualizado a ${etiquetaEstado(estado).toLowerCase()}.`)
       await recargar()
       setTimeout(() => setSuccessMessage(''), 4000)
@@ -156,6 +157,7 @@ function Domicilios() {
       <div className="nexdine-main" style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
           <div>
+            <UbicacionActual />
             <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>
               <FiTruck style={{ marginRight: '6px' }} /> Pedidos a domicilio
             </h2>

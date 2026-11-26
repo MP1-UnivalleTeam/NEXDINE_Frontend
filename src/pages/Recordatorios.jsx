@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FiPlus, FiBell, FiEdit2, FiTrash2, FiX, FiAlertTriangle, FiClock, FiMail, FiMonitor } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import { UbicacionActual } from '../components/EncabezadoPagina.jsx'
 import {
   PLANTILLAS, FRECUENCIAS, DIAS_SEMANA, recordatorioVacio, listarRecordatorios, guardarRecordatorio,
   eliminarRecordatorio, describirFrecuencia, proximaOcurrencia
@@ -156,8 +157,8 @@ function FormularioRecordatorio({ inicial, onGuardar, onCerrar, guardando }) {
                   <label style={etiqueta} htmlFor="rec-correos">Destinatarios (separados por coma)</label>
                   <input id="rec-correos" type="text" value={datos.destinatarios} placeholder="gerente@restaurante.com, caja@restaurante.com"
                     onChange={(e) => cambiar('destinatarios', e.target.value)} style={{ ...input, width: '100%', padding: '0 12px' }} />
-                  <small style={{ color: colores.advertenciaTexto, display: 'block', marginTop: '6px' }}>
-                    El envío por correo se activará cuando el servidor tenga el servicio de recordatorios.
+                  <small style={{ color: colores.textoSuave, display: 'block', marginTop: '6px' }}>
+                    El servidor envía el correo a la hora programada, aunque nadie tenga NexDine abierto.
                   </small>
                 </>
               )}
@@ -192,6 +193,7 @@ function Recordatorios() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [permiso, setPermiso] = useState('Notification' in window ? Notification.permission : 'unsupported')
+  const [pestana, setPestana] = useState('ACTIVOS')
 
   useEffect(() => {
     api.get('/api/auth/me')
@@ -271,11 +273,20 @@ function Recordatorios() {
     )
   }
 
-  const ordenados = [...lista].sort((a, b) => {
+  const todosOrdenados = [...lista].sort((a, b) => {
     const pa = proximaOcurrencia(a)?.getTime() ?? Infinity
     const pb = proximaOcurrencia(b)?.getTime() ?? Infinity
     return pa - pb
   })
+  // Pestañas dinámicas: el contador de cada una se recalcula con la lista.
+  const PESTANAS = [
+    { id: 'ACTIVOS', etiqueta: 'Activos', filtro: r => r.activo },
+    { id: 'PAUSADOS', etiqueta: 'Pausados', filtro: r => !r.activo },
+    { id: 'CORREO', etiqueta: 'Con correo', filtro: r => (r.canales || []).includes('CORREO') },
+    { id: 'TODOS', etiqueta: 'Todos', filtro: () => true }
+  ]
+  const pestanaActual = PESTANAS.find(p => p.id === pestana) || PESTANAS[0]
+  const ordenados = todosOrdenados.filter(pestanaActual.filtro)
 
   return (
     <div className="nexdine-shell" style={{ display: 'flex', minHeight: '100vh', overflowX: 'hidden', backgroundColor: colores.fondo }}>
@@ -284,6 +295,7 @@ function Recordatorios() {
       <div className="nexdine-main" style={{ marginLeft: '260px', flex: 1, padding: '30px', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
           <div>
+            <UbicacionActual />
             <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>Recordatorios automáticos</h2>
             <small style={{ color: colores.textoSuave }}>
               {lista.length === 0 ? 'Sin recordatorios configurados' : `${lista.filter(r => r.activo).length} de ${lista.length} activos`}
@@ -322,6 +334,29 @@ function Recordatorios() {
           </div>
         )}
 
+        {!cargando && lista.length > 0 && (
+          <div role="tablist" aria-label="Filtrar recordatorios" style={{ display: 'flex', gap: '4px', borderBottom: `1px solid ${colores.borde}`, marginBottom: '14px', overflowX: 'auto', overflowY: 'hidden' }}>
+            {PESTANAS.map(p => {
+              const activa = p.id === pestanaActual.id
+              const cantidad = lista.filter(p.filtro).length
+              return (
+                <button key={p.id} type="button" role="tab" aria-selected={activa} id={`pestana-${p.id}`}
+                  aria-controls="panel-recordatorios" onClick={() => setPestana(p.id)}
+                  style={{
+                    border: 'none', background: 'transparent', padding: '10px 14px', cursor: 'pointer', whiteSpace: 'nowrap',
+                    fontWeight: 600, fontSize: '14px', color: activa ? colores.primario : colores.textoSuave,
+                    borderBottom: `2px solid ${activa ? colores.primario : 'transparent'}`, marginBottom: '-1px'
+                  }}>
+                  {p.etiqueta}
+                  <span style={{ ...estiloBadge(activa ? colores.mint : colores.superficie, activa ? colores.primario : colores.textoSuave), marginLeft: '8px', height: '20px', textTransform: 'none' }}>
+                    {cantidad}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {cargando ? (
           <div role="status" style={{ ...tarjeta, padding: '48px', textAlign: 'center' }}>
             <div className="spinner-border" style={{ color: colores.primario }}></div>
@@ -329,11 +364,13 @@ function Recordatorios() {
         ) : ordenados.length === 0 ? (
           <div style={{ ...tarjeta, padding: '56px 24px', textAlign: 'center', color: colores.textoSuave }}>
             <FiClock style={{ fontSize: '2rem', color: colores.textoSuaveClaro }} className="mb-2" />
-            <div style={{ fontWeight: 600, color: colores.texto }}>Aún no tienes recordatorios</div>
-            <small>Crea uno para el cierre de caja, el inventario o la revisión de ventas.</small>
+            <div style={{ fontWeight: 600, color: colores.texto }}>
+              {lista.length === 0 ? 'Aún no tienes recordatorios' : `No hay recordatorios en "${pestanaActual.etiqueta}"`}
+            </div>
+            {lista.length === 0 && <small>Crea uno para el cierre de caja, el inventario o la revisión de ventas.</small>}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div id="panel-recordatorios" role="tabpanel" aria-labelledby={`pestana-${pestanaActual.id}`} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {ordenados.map(r => {
               const proxima = proximaOcurrencia(r)
               return (

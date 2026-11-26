@@ -5,6 +5,7 @@ import {
 } from 'react-icons/fi'
 import api from '../services/api.js'
 import Sidebar from '../components/Sidebar.jsx'
+import { UbicacionActual } from '../components/EncabezadoPagina.jsx'
 import {
   actualizarConfiguracionImpuesto,
   cambiarEstadoImpuesto,
@@ -200,6 +201,7 @@ function Impuestos() {
           flexWrap: 'wrap', gap: '12px', marginBottom: '24px'
         }}>
           <div>
+            <UbicacionActual />
             <h2 style={{ margin: 0, fontWeight: 700, color: colores.texto }}>
               <FiPercent style={{ marginRight: '8px' }} />
               Impuestos
@@ -218,11 +220,6 @@ function Impuestos() {
             >
               <FiRefreshCw style={{ marginRight: '6px' }} /> Actualizar
             </button>
-            <span className="text-muted d-none d-md-inline">Hola, <strong>{currentUser.nombre}</strong></span>
-            <img
-              src={`https://ui-avatars.com/api/?name=${currentUser.nombre}&background=11362E&color=fff`}
-              className="rounded-circle" width="40" height="40" alt="Avatar"
-            />
           </div>
         </div>
 

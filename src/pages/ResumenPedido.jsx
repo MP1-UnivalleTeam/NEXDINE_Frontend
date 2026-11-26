@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { FiArrowLeft, FiPackage, FiRefreshCw } from 'react-icons/fi'
+import { FiArrowLeft, FiPackage, FiRefreshCw, FiXCircle } from 'react-icons/fi'
 import api from '../services/api.js'
 import PagoPedido from '../components/PagoPedido.jsx'
 import EstadoPagoBadge from '../components/EstadoPagoBadge.jsx'
 import SeguimientoEstadoPedido from '../components/SeguimientoEstadoPedido.jsx'
-import { obtenerResumenPedido } from '../services/pedidos.js'
+import ModalCancelarPedido from '../components/ModalCancelarPedido.jsx'
+import { obtenerResumenPedido, cancelarPedido } from '../services/pedidos.js'
 import { obtenerMensajeError } from '../services/mensajes.js'
 import { obtenerContextoMenu } from '../utils/contextoMenu.js'
 import { etiquetaEstado } from '../utils/pedidos.js'
@@ -45,6 +46,7 @@ function ResumenPedido() {
   const navigate = useNavigate()
   const { pedidoId } = useParams()
   const [resumen, setResumen] = useState(null)
+  const [cancelando, setCancelando] = useState(false)
   const [rol, setRol] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -272,8 +274,25 @@ function ResumenPedido() {
         </div>
       </div>
 
+      {resumen.estado === 'CANCELADO' && resumen.motivoCancelacion && (
+        <div role="status" style={{ ...tarjeta, marginTop: '16px', padding: '12px 16px', backgroundColor: colores.errorFondo, color: colores.errorTexto, border: 'none', fontSize: '13.5px' }}>
+          Pedido cancelado. Motivo: {resumen.motivoCancelacion}
+        </div>
+      )}
+
       {/* Botón volver a editar */}
       <div className="mt-4 d-flex gap-2 flex-wrap">
+        {/* RF009: el cliente puede cancelar mientras el pedido no pase a preparación. */}
+        {resumen.cancelable && (
+          <button
+            type="button"
+            className="btn flex-grow-1 flex-md-grow-0"
+            style={{ ...btnGhost, minHeight: '44px', color: colores.errorTexto }}
+            onClick={() => setCancelando(true)}
+          >
+            <FiXCircle style={{ marginRight: '5px' }} /> Cancelar pedido
+          </button>
+        )}
         <button
           className="btn flex-grow-1 flex-md-grow-0"
           style={{ ...btnPrimario, minHeight: '44px' }}
@@ -282,6 +301,20 @@ function ResumenPedido() {
           <FiArrowLeft style={{ marginRight: '5px' }} /> Volver a editar
         </button>
       </div>
+      {cancelando && (
+        <ModalCancelarPedido
+          pedido={resumen}
+          motivosRapidos={['Me equivoqué en el pedido', 'Ya no lo necesito', 'Tarda demasiado']}
+          pagado={['PAGADO', 'PARCIAL'].includes(String(resumen.pagoEstado).toUpperCase())}
+          avisoPago="Ya pagaste este pedido. El restaurante te contactará para devolverte el dinero a Nequi o a tu tarjeta."
+          onCerrar={() => setCancelando(false)}
+          onConfirmar={async (motivo) => {
+            const actualizado = await cancelarPedido(resumen.id, motivo)
+            setCancelando(false)
+            if (actualizado?.id) setResumen(actualizado)
+          }}
+        />
+      )}
     </div>
   )
 }

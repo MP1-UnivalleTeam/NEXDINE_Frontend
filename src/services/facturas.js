@@ -1,14 +1,15 @@
 import api from './api.js'
 
 /**
- * Facturación electrónica.
- *
- * PENDIENTE BACKEND: estos endpoints aún no existen. La interfaz los llama y,
- * si responden 404/405/501, trabaja en modo provisional (ver ModalFactura).
+ * Facturación electrónica (RF030).
  *
  *   GET  /api/facturacion/emisor               → datos del emisor del restaurante
- *   POST /api/pedidos/{pedidoId}/factura       → emite la factura (numeración + CUFE)
+ *   PUT  /api/facturacion/emisor               → guarda los datos (administrador)
+ *   POST /api/pedidos/{pedidoId}/factura       → emite la factura (consecutivo oficial)
  *   POST /api/facturas/enviar  (multipart)     → envía el PDF al correo indicado
+ *
+ * Si el servidor no responde, la interfaz trabaja en modo provisional.
+ * La validación DIAN (CUFE) requiere un proveedor tecnológico autorizado.
  */
 
 const CLAVE_EMISOR = 'nexdine.facturacion.emisor'
@@ -30,6 +31,13 @@ export async function obtenerEmisor() {
   } catch {
     return { ...EMISOR_VACIO, ...leerEmisorLocal(), origen: 'local' }
   }
+}
+
+export async function guardarEmisorServidor(emisor) {
+  // eslint-disable-next-line no-unused-vars
+  const { origen, configurado, ...datos } = emisor
+  const response = await api.put('/api/facturacion/emisor', datos)
+  return { ...EMISOR_VACIO, ...response.data, origen: 'servidor' }
 }
 
 export function leerEmisorLocal() {
